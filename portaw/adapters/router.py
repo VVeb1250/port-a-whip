@@ -81,6 +81,20 @@ def format_context(hits: list[Hit]) -> str:
     return "\n".join(lines)
 
 
+def memory_block(prompt: str) -> str:
+    """L3 recall for the live hook (prompt-only — no edit-target). Safe → '' on any error."""
+    try:
+        from portaw.memory.inject import memory_context
+        from portaw.memory.store import load_lessons, load_project
+
+        entries = load_lessons() + load_project()
+        if not entries:
+            return ""
+        return memory_context(prompt, entries)
+    except Exception:
+        return ""
+
+
 # ----------------------------------------------------------------- hook entry
 
 def run_hook(stdin_text: str | None = None, host: HostId = "claude-code") -> str | None:
@@ -99,13 +113,14 @@ def run_hook(stdin_text: str | None = None, host: HostId = "claude-code") -> str
     if len(prompt) < _MIN_PROMPT_LEN or prompt.startswith("/"):
         return None
     hits = route_prompt(prompt)
-    if not hits:
+    blocks = [b for b in (format_context(hits) if hits else "", memory_block(prompt)) if b]
+    if not blocks:
         return None
     event = _WIRING[host].event if host in _WIRING else "UserPromptSubmit"
     out = {
         "hookSpecificOutput": {
             "hookEventName": event,
-            "additionalContext": format_context(hits),
+            "additionalContext": "\n".join(blocks),
         }
     }
     return json.dumps(out, ensure_ascii=False)

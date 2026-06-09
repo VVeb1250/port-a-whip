@@ -332,5 +332,95 @@ def router_status(host: str | None):
     click.echo(f"host={st['host']} event={st['event']} wired={st['wired']} settings={st['settings']}")
 
 
+@cli.group()
+def memory():
+    """Lesson + project memory (L3)."""
+
+
+@memory.command("recall")
+@click.argument("prompt", nargs=-1, required=True)
+@click.option("--symbol", "symbols", multiple=True, help="Edit-target symbol(s) being touched.")
+@click.option("--path", "paths", multiple=True, help="Edit-target path(s) being touched.")
+def memory_recall(prompt: tuple[str, ...], symbols: tuple[str, ...], paths: tuple[str, ...]):
+    """Dry-run retrieval: what memory would inject for a prompt (+ optional edit-target)."""
+    from portaw.memory.anchors import AnchorQuery
+    from portaw.memory.inject import format_memory, select
+    from portaw.memory.retrieval import recall
+    from portaw.memory.store import load_lessons, load_project
+
+    entries = load_lessons() + load_project()
+    if not entries:
+        click.echo("(no memory yet — add some with `portaw memory add`)")
+        return
+    q = AnchorQuery(symbols=tuple(symbols), paths=tuple(paths))
+    scored = recall(" ".join(prompt), entries, query=q)
+    selected = select(scored)
+    block = format_memory(selected)
+    if not block:
+        click.echo("(silent — nothing cleared the floor)")
+        return
+    click.echo(block)
+    for s in selected:
+        click.echo(f"    score={s.score:.3f} rel={s.relevance:.2f} "
+                   f"anchor={s.anchor:.2f} act={s.activation:.2f} type={s.entry.type}")
+
+
+@memory.command("list")
+@click.option("--type", "etype", default=None, help="Filter: lesson / project.")
+def memory_list(etype: str | None):
+    """List stored memory entries."""
+    from portaw.memory.store import load_lessons, load_project
+
+    entries = load_lessons() + load_project()
+    if etype:
+        entries = [e for e in entries if e.type == etype]
+    if not entries:
+        click.echo("(empty)")
+        return
+    for e in sorted(entries, key=lambda x: -x.recurrence):
+        pin = "★" if e.pinned else " "
+        click.echo(f"  {pin} [{e.type:<7}] {e.applicability:<16} ×{e.recurrence:<3} {e.body[:70]}")
+
+
+@memory.command("add")
+@click.argument("body", nargs=-1, required=True)
+@click.option("--type", "etype", type=click.Choice(["lesson", "project"]), default="lesson")
+@click.option("--scope", type=click.Choice(["global", "project"]), default=None,
+              help="Default: global for lessons, project for project-memory.")
+@click.option("--applicability", default="universal", help="universal | stack:<x> | project:<id>.")
+@click.option("--trigger", "triggers", multiple=True, help="Router trigger term(s).")
+@click.option("--symbol", "symbols", multiple=True, help="Anchor symbol(s).")
+@click.option("--path", "paths", multiple=True, help="Anchor path(s).")
+@click.option("--pin", is_flag=True, help="Always-on tier (highest-ROI universal only).")
+def memory_add(body, etype, scope, applicability, triggers, symbols, paths, pin):
+    """Add a memory entry (compressed one-liner body)."""
+    from datetime import date
+
+    from portaw.memory.anchors import Anchors
+    from portaw.memory.schema import MemoryEntry
+    from portaw.memory.store import (
+        load_lessons,
+        load_project,
+        save_lessons,
+        save_project,
+        upsert,
+    )
+
+    scope = scope or ("global" if etype == "lesson" else "project")
+    entry = MemoryEntry.new(
+        etype, " ".join(body), scope,
+        applicability=applicability if etype == "lesson" else f"project:{scope}",
+        trigger_terms=tuple(triggers),
+        anchors=Anchors(symbols=tuple(symbols), paths=tuple(paths)),
+        source="user", last_seen=date.today().isoformat(),
+    )
+    today = date.today().isoformat()
+    if etype == "lesson":
+        save_lessons(upsert(load_lessons(), entry, last_seen=today))
+    else:
+        save_project(upsert(load_project(), entry, last_seen=today))
+    click.echo(f"added [{etype}] {entry.id}: {entry.body[:60]}")
+
+
 if __name__ == "__main__":
     cli()
