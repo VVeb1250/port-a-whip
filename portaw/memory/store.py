@@ -20,6 +20,7 @@ from portaw.memory.schema import MemoryEntry
 
 _LESSONS_FILE = "lessons.jsonl"
 _PROJECT_FILE = "project.jsonl"
+_ARCHIVE_FILE = "lessons-archive.jsonl"
 
 
 class MemoryStoreError(RuntimeError):
@@ -114,6 +115,19 @@ def upsert(
     if not found:
         out.append(entry)
     return out
+
+
+# --- archive (consolidation moves stale lessons here, not deletion) ---
+
+def archive_path() -> Path:
+    return global_dir() / _ARCHIVE_FILE
+
+
+def append_archive(entries: list[MemoryEntry]) -> None:
+    """Append archived lessons to the archive store (history, recur → revive)."""
+    if not entries:
+        return
+    _write_jsonl(archive_path(), _read_jsonl(archive_path()) + entries)
 
 
 # --- cold-tier detail (optional full writeup) ---

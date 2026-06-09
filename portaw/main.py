@@ -422,5 +422,100 @@ def memory_add(body, etype, scope, applicability, triggers, symbols, paths, pin)
     click.echo(f"added [{etype}] {entry.id}: {entry.body[:60]}")
 
 
+@memory.command("capture")
+@click.option("--trigger", required=True, help="What went wrong (short).")
+@click.option("--fix", required=True, help="What to do instead.")
+@click.option("--symbol", "symbols", multiple=True)
+@click.option("--path", "paths", multiple=True)
+@click.option("--stack", default="", help="Framework hint → stack:<x>.")
+@click.option("--env", "env_level", is_flag=True, help="Env/shell-level → universal.")
+@click.option("--confidence", default=0.6, type=float)
+@click.option("--project", "project_id", default=None, help="Project id (default: cwd name).")
+def memory_capture(trigger, fix, symbols, paths, stack, env_level, confidence, project_id):
+    """Capture a failure→fix as a lesson (gate-checked)."""
+    from pathlib import Path
+
+    from portaw.memory.capture import FailureSignal, capture
+
+    pid = project_id or Path.cwd().name
+    sig = FailureSignal(
+        trigger=trigger, fix=fix, symbols=tuple(symbols), paths=tuple(paths),
+        stack=stack, env_level=env_level, confidence=confidence,
+    )
+    res = capture(sig, pid)
+    if res.stored:
+        click.echo(f"captured [{res.entry.applicability}] {res.entry.id}: {res.entry.body[:60]}")
+    else:
+        click.echo(f"NOT stored — {res.verdict.reason}")
+        raise SystemExit(1)
+
+
+@memory.command("capture-hook")
+@click.option("--host", default="claude-code", help="Host that fired the Stop event.")
+def memory_capture_hook(host: str):
+    """Stop-hook entrypoint: read a paw_lesson payload from stdin, store it. Never fails."""
+    try:
+        from portaw.memory.capture import run_capture_hook
+
+        res = run_capture_hook()
+        if res and res.stored:
+            click.echo(f"paw memory: captured {res.entry.id}", err=True)
+    except Exception:
+        pass
+    raise SystemExit(0)
+
+
+@memory.command("consolidate")
+@click.option("--dry-run", is_flag=True, help="Show what would change without writing.")
+def memory_consolidate(dry_run: bool):
+    """Async 'dream' pass: merge dups, promote, archive stale lessons."""
+    from portaw.memory.consolidate import consolidate
+    from portaw.memory.store import append_archive, load_lessons, save_lessons
+
+    before = load_lessons()
+    res = consolidate(before)
+    click.echo(
+        f"lessons {len(before)} → kept {len(res.kept)} · "
+        f"merged {res.merged_count} · promoted {res.promoted_count} · "
+        f"archived {len(res.archived)}"
+    )
+    if dry_run:
+        click.echo("(dry-run — nothing written)")
+        return
+    save_lessons(res.kept)
+    append_archive(res.archived)
+    click.echo("consolidated.")
+
+
+@memory.command("init")
+@click.option("--confirm", is_flag=True, help="Write harvested entries (gate-required).")
+@click.option("--adr-dir", default=None, help="ADR dir (default: docs/adr).")
+def memory_init(confirm: bool, adr_dir: str | None):
+    """Seed project-memory: harvest docs/adr/* (v1). Preview unless --confirm."""
+    from portaw.memory.gate import accepts
+    from portaw.memory.seed import default_adr_dir, harvest_adrs
+    from portaw.memory.store import load_project, save_project, upsert
+    from datetime import date
+
+    d = adr_dir or default_adr_dir()
+    harvested = harvest_adrs(d)
+    if not harvested:
+        click.echo(f"no ADRs found under {d} — nothing to harvest")
+        return
+    click.echo(f"harvested {len(harvested)} ADR(s) from {d}:")
+    for e in harvested:
+        click.echo(f"  • {e.body[:80]}")
+    if not confirm:
+        click.echo("\n(preview — re-run with --confirm to write project-memory)")
+        return
+    today = date.today().isoformat()
+    entries = load_project()
+    for e in harvested:
+        if accepts(e, confirmed=True).ok:  # --confirm satisfies the project gate
+            entries = upsert(entries, e, last_seen=today)
+    save_project(entries)
+    click.echo(f"wrote {len(harvested)} entries to project-memory.")
+
+
 if __name__ == "__main__":
     cli()
