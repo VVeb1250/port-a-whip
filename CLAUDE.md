@@ -134,9 +134,18 @@ portaw router status        # host + tier
 - [x] **efficiency-starter host-conditional anchor** 2026-06-06 — code-intel splits by host: **CC=codegraph** (idle free on lazy-load + richer: callers/callees/impact) / **Codex+Gemini=semble** (509 vs codegraph 1615 idle tok CALCULATED = 68% leaner on load-all). New `host_anchor` field (tool→host[]) threaded through healthcheck (`alt` status, non-fatal) + install (`alt_skipped`, skips other-host tool) + CLI. codex/gemini token_profile now `calculated` 509 (was estimated). N1: 1 code-intel MCP/host (XOR) + rtk. 71 tests (was 67: +2 healthcheck host-cond, +2 install host-cond). **codegraph index BUILT for port-a-whip itself** (21 files/283 nodes) → codegraph_explore live for this repo.
 
 ### Phase 3 — Lesson-memory (durable moat)
-- [ ] lesson capability: Stop hook capture → relevance inject
-- [ ] port mistake-learning to Codex/Gemini (do NOT rebuild on Claude Code — author's hook runs)
-- [ ] upgrade always-on → relevance-ranked; cross-host lesson sync
+> Design crystallized in [docs/L3-DESIGN.md](docs/L3-DESIGN.md) (R1-R12 + anchor weighting + scope + build-order). Built 2026-06-10 (143 tests).
+- [x] **L3 core BUILT (Phase 1-6, `portaw/memory/`)** — lesson + project memory, recall works end-to-end:
+  - schema (content-hash id = free cross-project dedup, R8 compressed body) + store (jsonl, global `~/.paw/memory` + project `.paw/memory`, atomic, malformed-tolerant, upsert-bump, archive)
+  - retrieval = HYBRID reusing the ONE kernel (`kernel.route`, semantic) + anchor overlap (path/symbol, zero-setup structural; codegraph node = present-only bonus) + ACT-R activation rank (recency×frequency); applicability filter (universal/stack/project); **silence-default**
+  - injection = silence-biased, per-type threshold (lesson low / project high), budget cap, pinned-first; **wired into `adapters/router.py`** (memory injects alongside set hits, fail-safe)
+  - capture = `FailureSignal` → applicability auto-tag → integrity gate (§7, scope-scaled bar) → upsert; cross-host `paw_lesson` contract (`run_capture_hook`, safe-by-construction)
+  - consolidate = async "dream": merge/promote/decay-archive (extends mistakes-sweep ethos); seed = ADR-harvest v1 (confirm-gated)
+  - CLI: `portaw memory add/list/recall/capture/capture-hook/consolidate/init`
+- [ ] **WIRE LIVE (next):** `memory capture-hook` into CC Stop event (config) + router memory-inject dogfood; NL transcript→FailureSignal detector (design §13 — structured contract is the floor, NL is iterative)
+- [ ] **port capture to Codex/Gemini live** (contract built + unit-tested; needs live Stop-event wiring per host = the portability moat proof) + cross-host lesson sync
+- [ ] embedding tier-2 (lazy, reuse skill-router model) — floor ships TF-IDF+anchor; embedding = opt-in upgrade
+- runtime deps unchanged (click + tomlkit); memory adds NO mandatory per-project setup (`.paw/memory` dir only)
 - ⚠️ L3 axis is NON-NEGOTIABLE = **cross-host portability + mistake-surfacing** (NOT general agent memory). jcode (host) already does intra-host general memory better — paw is redundant if it drifts off these 2 axes. See [registry/deep-vet.md](registry/deep-vet.md) §7.
 
 ### Phase 4 — GUI/app (CANDIDATE only, build AFTER L3)
