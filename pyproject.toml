@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "port-a-whip"
+version = "0.3.0"
+description = "Curated sets + capability router + lesson-memory for coding agents (Claude Code, Codex, Gemini)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "whipforaweep" }]
+keywords = ["claude-code", "codex", "gemini", "mcp", "ai", "coding-agent", "harness"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Build Tools",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+  "click>=8.1",
+  "tomlkit>=0.13",  # TOML write preserving comments (Codex config.toml). stdlib json + tomllib cover the rest.
+]
+
+[project.scripts]
+portaw = "portaw.main:cli"
+
+[tool.hatch.build.targets.sdist]
+# registry/ lives at repo root (source of truth); ship it in the sdist so the
+# wheel's force-include can relocate it to portaw/registry when building from sdist.
+include = ["/portaw", "/registry", "/README.md", "/LICENSE", "/pyproject.toml"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["portaw"]
+
+# Wheel-scoped (NOT global): relocate only the runtime file into the package.
+# Global force-include would also fire during sdist build and break sdist→wheel.
+# Docs (candidate-backlog/deep-vet) stay in the sdist but out of the wheel.
+[tool.hatch.build.targets.wheel.force-include]
+"registry/sets.json" = "portaw/registry/sets.json"

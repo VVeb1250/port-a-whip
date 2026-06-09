@@ -1,0 +1,965 @@
+{
+  "schema_version": "0.3.1",
+  "_comment": "Curated SETS = bundles vetted to be quality AND compatible together. NOT a per-tool registry (Smithery/mcpm do that). See port-a-whip-spec.md v0.3.",
+  "sets": [
+    {
+      "set_name": "efficiency-starter",
+      "description": "Token-lean coding stack: semantic code navigation (cuts grep/read tool-calls) + shell-output compression. Two complementary layers, no hook collision.",
+      "trigger_terms": [
+        "code navigation",
+        "find usages",
+        "where is",
+        "callers",
+        "callees",
+        "explore code",
+        "architecture",
+        "grep",
+        "search code",
+        "shell output",
+        "build output",
+        "test output",
+        "compress",
+        "token",
+        "tool calls"
+      ],
+      "token_profile": {
+        "method": "measured = ccusage A/B (portaw bench --ab/--how) on the set's canonical workload, or command-level rtk-gain instrumentation. calculated = tiktoken (cl100k_base proxy) on the verbatim live MCP tool-def JSON the host loads (host tokenizers vary ~10-15%). vendor-claimed = from vendor docs, unverified. estimated = reasoned, not measured. neutral = 0 MCP tool-defs by construction (CLI/hook), idle schema cost provably zero. delta_pct = signed % tokens saved (+ = saved); idle_def_tokens = always-on tool-def cost on load-all hosts (0 on Claude Code, which lazy-loads).",
+        "hosts": {
+          "claude-code": {
+            "provenance": "vendor-claimed",
+            "delta_pct": 26.3,
+            "idle_def_tokens": 0,
+            "sample": "rtk: rtk-gain 320 cmds mixed real workload, 2026-06-05 (MEASURED). codegraph: deterministic into-context proxy 2026-06-08 (tiktoken on tool-returns, port-a-whip self-index) — relationship-question class only.",
+            "note": "Set provenance = weakest link. rtk component MEASURED 26.3% mixed (per-cmd best-case far higher: diff 74.9%, ls 68-87%; read 7.8%/grep 10.6% dilute). codegraph: DETERMINISTIC proxy ran 2026-06-08 (bench/out/codeintel/, tiktoken cl100k on what enters context, n=1 small repo) — QUESTION-TYPE-DEPENDENT: callers+impact of get_set = 172 tok vs grep+read trace 6,622 (~97% LESS, codegraph crushes its home turf, grep can't even trace impact); BUT narrow 'show me this one file' = codegraph_explore over-returns 3 files 2,894 tok vs targeted Read of config.py 606 (~4.8x MORE). So codegraph wins BIG on relationship/impact/callers (use callers/impact tools), LOSES on show-one-symbol (use Read; explore=Read-equivalent). NO single blanket delta_pct — depends on question mix. Full session ccusage A/B still pending (bench/guides/04-05, needs fresh sessions). CC idle defs = 0 (codegraph lazy-loads). ROP 3-LANE RUN 2026-06-09 (grep vs codegraph vs semble, 3 real repos algorithm/backend/frontend, the 5-question workload): ccusage token-delta NOT isolable (the 'fresh' sessions were not single-workload-clean -> session totals contaminated, 0.7M-20M tok), so CAPABILITY/COMPLETENESS became the decisive axis (same outcome shape as web-research). RESULT: codegraph answered 5/5 FULLY every trial via callers/impact/explore (~15 calls/trial); semble answered only the SEARCH-shaped questions (Q1 entrypoint partial/full, Q4 config full, Q5 arch full) but Q2 callers = always PARTIAL and Q3 impact = NOT/PARTIAL because semble has NO callers/callees/impact tool (find_related returns semantic-similar code, not structural refs; also missed small/unindexed files + cross-repo config). One head-to-head trial: codegraph 5/5 FULLY in ~15 calls vs semble 1/5 FULLY 3/5 PARTIAL 1/5 NOT in 23 calls. CONFIRMS the host-conditional anchor on CAPABILITY grounds: codegraph earns CC (idle-free + the only one that answers refactor/impact/callers); semble's idle-leanness only pays off where the workload is pure search. VENDOR BENCHES (external, 2026-06-09, provenance vendor-claimed but CORROBORATED by paw's capability run + proxy): codegraph (colbymchenry, 7 repos×7 langs, MEDIAN of 4 runs/arm) = 59% fewer tokens + 70% fewer tool-calls + 35% cheaper + 49% faster, with include_source-whole-file = 64% WORSE (matches paw's show-one-file 4.8x-more proxy finding exactly); semble (MinishLab, 1250 pairs×63 repos) = 98% fewer tokens but SEARCH-RETRIEVAL only (94% recall@2k, NDCG 0.854 — silent on callers/impact = consistent with paw's capability gap). These two published benches + caveats independently agree with paw's findings, closing the clean-delta question without a paw-owned isolated-session run (which is still the only path to a paw `measured` label)."
+          },
+          "codex": {
+            "provenance": "calculated",
+            "delta_pct": null,
+            "idle_def_tokens": 509,
+            "sample": "semble anchor on load-all host: tiktoken cl100k on live MCP schemas = 509 tok (search 202 + find_related 226 + instructions 81). codegraph alt = 1615.",
+            "note": "rtk (hook-proxy, 0 def) + semble (509 idle) = the load-all efficiency stack. codegraph (1615) reserved for CC where idle is free. rtk runtime saving measured 26.3% on CC host; semble runtime clean-delta still unmeasured (ROP run sessions contaminated), but its CAPABILITY ceiling is now confirmed: search-shaped Qs only, NO callers/callees/impact (ROP 2026-06-09). So on load-all hosts semble = the idle-lean DISCOVERY anchor; if refactor-impact/caller-audit is needed, swap semble->codegraph (idle 1615)."
+          },
+          "gemini": {
+            "provenance": "calculated",
+            "delta_pct": null,
+            "idle_def_tokens": 509,
+            "sample": "semble anchor on load-all host: tiktoken cl100k on live MCP schemas = 509 tok (search 202 + find_related 226 + instructions 81). codegraph alt = 1615.",
+            "note": "rtk (hook-proxy, 0 def) + semble (509 idle) = the load-all efficiency stack. codegraph (1615) reserved for CC where idle is free. rtk runtime saving measured 26.3% on CC host; semble runtime clean-delta still unmeasured (ROP run sessions contaminated), but its CAPABILITY ceiling is now confirmed: search-shaped Qs only, NO callers/callees/impact (ROP 2026-06-09). So on load-all hosts semble = the idle-lean DISCOVERY anchor; if refactor-impact/caller-audit is needed, swap semble->codegraph (idle 1615)."
+          }
+        }
+      },
+      "mcp": [
+        {
+          "tool": "codegraph",
+          "display_name": "CodeGraph",
+          "ref": "@colbymchenry/codegraph",
+          "version": "latest",
+          "kind": "mcp-stdio",
+          "health_binary": "codegraph",
+          "purpose": "Pre-indexed local code knowledge graph. MCP tools codegraph_context (map a region) + codegraph_explore (symbol + relationships). Cuts token/tool-calls vs grep+read.",
+          "config_source": "codegraph install --print-config <id>",
+          "_config_source_note": "VERIFIED 2026-06-05 via `codegraph install --print-config <id>` (codegraph CLI v on PATH). Host id mapping: claude | codex | gemini | cursor (NOT 'claude-code'; full id set: claude,cursor,codex,opencode,hermes,gemini,antigravity,kiro). paw fetches the block then patches via its own patcher (uniform backup/rollback). DRIFT CORRECTED: earlier shape used `npx -y @colbymchenry/codegraph` — actual canonical command is the bare `codegraph` binary (installed on PATH) with `type:stdio`.",
+          "mcp_config": {
+            "type": "stdio",
+            "command": "codegraph",
+            "args": [
+              "serve",
+              "--mcp"
+            ],
+            "env": {}
+          },
+          "mcp_config_per_host": {
+            "_note": "VERIFIED --print-config output 2026-06-05. claude/codex/gemini identical (serve --mcp); cursor adds workspace path.",
+            "claude": {
+              "_target": "~/.claude.json mcpServers.codegraph",
+              "type": "stdio",
+              "command": "codegraph",
+              "args": [
+                "serve",
+                "--mcp"
+              ]
+            },
+            "codex": {
+              "_target": "~/.codex/config.toml [mcp_servers.codegraph]",
+              "command": "codegraph",
+              "args": [
+                "serve",
+                "--mcp"
+              ]
+            },
+            "gemini": {
+              "_target": "~/.gemini/settings.json mcpServers.codegraph",
+              "type": "stdio",
+              "command": "codegraph",
+              "args": [
+                "serve",
+                "--mcp"
+              ]
+            },
+            "cursor": {
+              "_target": "~/.cursor/mcp.json mcpServers.codegraph",
+              "type": "stdio",
+              "command": "codegraph",
+              "args": [
+                "serve",
+                "--mcp",
+                "--path",
+                "${workspaceFolder}"
+              ]
+            }
+          },
+          "setup_shim": {
+            "_why": "MCP config alone leaves codegraph DEAD — it needs a built index. This is the residue patcher cannot do (vendor code). Scope to chosen project only.",
+            "steps": [
+              {
+                "label": "init + build index",
+                "cmd": "codegraph init -i",
+                "cwd": "{project_root}",
+                "runs_vendor_code": true
+              }
+            ]
+          },
+          "self_installs": true,
+          "_self_installs_note": "codegraph ships its own cross-host installer that patches ALL hosts interactively. paw does NOT delegate to it (no host-scoping, no uniform rollback, interactive). paw self-patches the single chosen host via config_source/mcp_config, then runs the index shim.",
+          "host_anchor": "claude-code",
+          "_host_anchor_note": "CC lazy-loads MCP defs -> idle ~0, so codegraph's richer toolset (callers/callees/impact/explore, 8 tools = 1615 tok CALCULATED cl100k) is free here and wins. On load-all hosts (Codex/Gemini) those 1615 tok are ALWAYS-ON -> use semble instead (see semble entry)."
+        },
+        {
+          "tool": "semble",
+          "display_name": "Semble",
+          "ref": "MinishLab/semble",
+          "version": "latest",
+          "kind": "mcp-stdio",
+          "health_binary": "semble",
+          "host_anchor": [
+            "codex",
+            "gemini"
+          ],
+          "purpose": "Semantic code search MCP (2 tools: search + find_related). Answers 'where/how' from an index instead of grep+read. Leaner than codegraph on load-all hosts: 509 tok idle (CALCULATED cl100k, 2 tools+instructions) vs codegraph 1615 (8 tools) = 68% less always-on def cost.",
+          "_host_anchor_note": "Load-all hosts (Codex/Gemini) pay every tool-def at startup -> semble's 509 < codegraph's 1615 matters. TRADE: semble = search+similarity only; NO callers/callees/impact. If a workflow needs refactor-impact, codegraph wins despite the idle cost. Runtime token-saving (grep+read replacement) claimed ~98%; clean A/B delta NOT isolable on the ROP run (sessions contaminated). CAPABILITY GAP CONFIRMED 2026-06-09 (ROP 3-repo run): semble fully answers search-shaped Qs (entrypoint/config/architecture) but CANNOT answer 'all callers' (Q2 always PARTIAL) or 'signature-change impact' (Q3 NOT/PARTIAL) -- no structural callers/callees/impact tool, find_related returns semantic neighbors not references, and it missed small/unindexed files + cross-repo config. So semble is a SEARCH primitive, not a call-graph tool: fine as the load-all idle-lean anchor for discovery, but swap to codegraph the moment refactor/impact/caller-audit is in scope.",
+          "install": [
+            "uv tool install semble"
+          ],
+          "mcp_config": {
+            "type": "stdio",
+            "command": "uvx",
+            "args": [
+              "--from",
+              "semble[mcp]",
+              "semble"
+            ],
+            "env": {}
+          },
+          "mcp_config_per_host": {
+            "_note": "VERIFIED from MinishLab/semble docs/installation.md 2026-06-06. Needs uv/uvx on PATH.",
+            "codex": {
+              "_target": "~/.codex/config.toml [mcp_servers.semble]",
+              "command": "uvx",
+              "args": [
+                "--from",
+                "semble[mcp]",
+                "semble"
+              ]
+            },
+            "gemini": {
+              "_target": "~/.gemini/settings.json mcpServers.semble",
+              "command": "uvx",
+              "args": [
+                "--from",
+                "semble[mcp]",
+                "semble"
+              ]
+            },
+            "claude": {
+              "_target": "~/.claude.json mcpServers.semble (NOT default anchor on CC; codegraph preferred)",
+              "command": "uvx",
+              "args": [
+                "--from",
+                "semble[mcp]",
+                "semble"
+              ]
+            }
+          }
+        }
+      ],
+      "non_mcp": [
+        {
+          "tool": "rtk",
+          "display_name": "RTK (Rust Token Killer)",
+          "ref": "github.com/rtk-ai/rtk",
+          "license": "MIT",
+          "version": "pin-at-install",
+          "kind": "hook-proxy",
+          "purpose": "PreToolUse hook rewrites Bash commands to rtk equivalents, compresses shell output (cargo/pytest/go test/git/grep/find/ls/tsc/eslint/docker/kubectl) before it enters context. 60-90% on common dev commands (vendor).",
+          "install": [
+            {
+              "label": "install rtk binary",
+              "cmd": "curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh",
+              "_alt": "brew install rtk (macOS/Linux); winget install rtk-ai.rtk (Windows)",
+              "runs_vendor_code": true
+            },
+            {
+              "label": "install hook + RTK.md into host",
+              "cmd": "rtk init -g --auto-patch",
+              "_alt_manual": "rtk init -g --no-patch  (prints hook for paw to apply)",
+              "runs_vendor_code": true
+            }
+          ],
+          "hook_entry": {
+            "_note": "VERIFIED 2026-06-05 from live host settings.json (rtk init writes this). paw can write it directly via its own patcher (rtk init -g --no-patch to skip rtk's own write).",
+            "event": "PreToolUse",
+            "matcher": "Bash",
+            "hook": {
+              "type": "command",
+              "command": "rtk hook claude"
+            },
+            "_per_host": "command arg = target agent: `rtk hook claude` (Claude Code) | `rtk hook gemini` (Gemini). Cursor/aider per rtk --agent."
+          },
+          "host_support": [
+            "claude-code",
+            "cursor",
+            "gemini",
+            "aider"
+          ],
+          "_install_note": "rtk is non-MCP (never in any MCP registry by definition) — exactly the gap paw fills. It self-installs its hook; paw orchestrates the step + records it for clean `portaw remove`. NO shell=True execution of community-supplied strings (RCE) — these install steps are curated/reviewed, pinned, and run as a fixed vendor script."
+        }
+      ],
+      "compat_notes": "CURATION VALUE — why these two are vetted together: DIFFERENT LAYERS, no collision. (1) codegraph = MCP context provider, adds tools, NO host hook. (2) rtk = PreToolUse hook, compresses Bash OUTPUT, adds NO MCP tools. They never touch the same surface: rtk owns PreToolUse, codegraph owns MCP. Complementary token reduction (rtk on shell output, codegraph on code-navigation). Install order: codegraph (config patch + index build) then rtk (hook). rtk supports claude-code/cursor/gemini/aider; codegraph supports claude-code/codex/gemini/cursor/opencode — INTERSECTION for full-set = claude-code, gemini, cursor (codex gets codegraph only; aider gets rtk only).",
+      "verified": {
+        "schema_validated": "2026-06-05",
+        "refs_confirmed": "2026-06-05 — codegraph npm @colbymchenry/codegraph confirmed; rtk github.com/rtk-ai/rtk MIT confirmed",
+        "config_block_confirmed": "2026-06-05 — codegraph mcp_config captured from `codegraph install --print-config <id>` (claude/codex/gemini/cursor, drift corrected npx→bare binary); rtk hook entry captured from live settings.json (PreToolUse/Bash/`rtk hook claude`). Both stored in mcp_config_per_host + hook_entry.",
+        "token_profile_benchmarked": "partial — rtk anchor LOCKED 2026-06-05 (rtk-gain: 26.3% mixed / 35.6K saved / 320 cmds, command-level paired A/B, zero cache noise). codegraph half pending Phase-2.",
+        "rtk_anchor_decision": "LOCKED. rtk net-positive on real mixed workload (26.3%); strongest on bulk/structured output (diff/ls/build). Beats peer-anchor bar — rivals (context-mode/lean-ctx/snip/ecotokens) do NOT self-report a reproducible command-level number, rtk does. No swap.",
+        "rtk_local_bench_2026_06_09": "DETERMINISTIC corroboration (paw's own, bench/_compress_ab.py: tiktoken cl100k on raw-vs-rtk command output, rop-backend git-heavy workload, zero ccusage/cache noise): git_diff 69.1%, git_log_stat 53.5%, git_status 70.6% -> TOTAL 63.5% (raw 14,643 -> rtk 5,340). Confirms rtk's per-command bulk/structured strength independently of vendor numbers; the 26.3% mixed figure is lower only because read/grep dilute a mixed session.",
+        "headroom_challenge_2026_06_09": "RESOLVED — NOT a rival/swap. rtk (PreToolUse hook, command-OUTPUT) and headroom (API-proxy, session/history/RAG) are COMPLEMENTARY LAYERS that STACK. Real 1-month dual-deploy (andrewpatterson.dev): rtk = 88% of savings, headroom = +12% ADDITIVE. headroom per-model 32-59% (headline 60-95% = per-content best-case). rtk stays the anchor (bigger lever + standalone-EXE 0-build on Windows); headroom = CANDIDATE OPTIONAL additive rung but Windows install friction is real (PyPI ships NO Windows wheel — macOS+manylinux only; Rust/maturin build fails without a toolchain on py3.12 AND 3.14). Keep headroom optional, not core. Detail: deep-vet §6 challenge B.",
+        "hosts_tool_supported": [
+          "claude-code",
+          "gemini",
+          "cursor"
+        ],
+        "hosts_full_set_intersection": [
+          "claude-code",
+          "gemini",
+          "cursor"
+        ]
+      },
+      "code_intel_anchor_by_host": {
+        "_decision": "2026-06-06 host-conditional anchor (idle-def calculated, runtime A/B pending).",
+        "claude-code": "codegraph (idle free on lazy-load host; richer: callers/callees/impact)",
+        "codex": "semble (509 vs codegraph 1615 idle tok = 68% leaner on load-all host; search-only)",
+        "gemini": "semble (same as codex)",
+        "_n1": "Only ONE code-intel MCP per host (codegraph XOR semble) + rtk (0 def) = 1 active MCP server/host, under N1 ceiling. No redundancy: the set never loads both on one host."
+      }
+    },
+    {
+      "set_name": "secure-agent",
+      "description": "Permissions + supply-chain guardrails for autonomous coding agents. Covers the harness component codegraph/rtk leave empty: a deterministic action-guard, secret leak prevention, and dependency-vuln defense. Entirely CLI/hook — ZERO MCP tool-defs, so it adds no per-session schema overhead on any host.",
+      "_criterion_note": "DIFFERENT AXIS from efficiency-starter. paw's core gate is 'reduce tokens OR improve context quality'; this set's PRIMARY value is the harness Permissions component (prevent catastrophic actions, block secret commits, catch malicious deps) — the 5th harness component (Tools/Knowledge/Observation/Action/Permissions). Secondary token benefit: every tool emits STRUCTURED/BOUNDED findings (JSON file:line:rule) instead of raw dumps the agent must scroll. Curated here because Permissions is the gap no registry/host covers; not over-claimed as a token-saver.",
+      "trigger_terms": [
+        "security",
+        "permission",
+        "secret",
+        "credential",
+        "api key",
+        "leak",
+        "vulnerability",
+        "dependency audit",
+        "supply chain",
+        "rm -rf",
+        "sandbox",
+        "pre-commit",
+        "cve"
+      ],
+      "token_profile": {
+        "method": "measured = ccusage A/B (portaw bench --ab/--how) on the set's canonical workload, or command-level rtk-gain instrumentation. calculated = tiktoken (cl100k_base proxy) on the verbatim live MCP tool-def JSON the host loads (host tokenizers vary ~10-15%). vendor-claimed = from vendor docs, unverified. estimated = reasoned, not measured. neutral = 0 MCP tool-defs by construction (CLI/hook), idle schema cost provably zero. delta_pct = signed % tokens saved (+ = saved); idle_def_tokens = always-on tool-def cost on load-all hosts (0 on Claude Code, which lazy-loads).",
+        "hosts": {
+          "claude-code": {
+            "provenance": "neutral",
+            "delta_pct": null,
+            "idle_def_tokens": 0,
+            "sample": "0 MCP servers in set (nah=PreToolUse hook, gitleaks/osv-scanner/infisical=CLI).",
+            "note": "Token cost provably zero: no MCP tool-defs loaded on any host. Secondary tok-saving where bounded JSON replaces raw scan dumps (unmeasured, upside)."
+          },
+          "codex": {
+            "provenance": "neutral",
+            "delta_pct": null,
+            "idle_def_tokens": 0,
+            "sample": "0 MCP defs.",
+            "note": "CLI/hook tools invoked on demand; no startup schema cost even on load-all host."
+          },
+          "gemini": {
+            "provenance": "neutral",
+            "delta_pct": null,
+            "idle_def_tokens": 0,
+            "sample": "0 MCP defs.",
+            "note": "same — neutral by construction."
+          }
+        }
+      },
+      "mcp": [],
+      "non_mcp": [
+        {
+          "tool": "nah",
+          "display_name": "nah (action-aware permission guard)",
+          "ref": "github.com/manuelschipper/nah",
+          "license": "MIT",
+          "version": "v0.9.0",
+          "kind": "hook-guard",
+          "purpose": "Deterministic PreToolUse classifier that distinguishes safe vs dangerous shell actions (e.g. `rm dist/` vs `rm ~/.bashrc`, `curl evil | bash`). No LLM in the path = no latency. Project override is TIGHTEN-ONLY (supply-chain-safe: a repo cannot LOOSEN your guard).",
+          "install": [
+            {
+              "label": "install nah (pip)",
+              "cmd": "pip install \"nah[config,keys]\"",
+              "_alt_nix": "nix profile add github:manuelschipper/nah",
+              "runs_vendor_code": true
+            },
+            {
+              "label": "wire guard into Claude Code",
+              "cmd": "nah install claude",
+              "_alt_plugin_only": "claude plugin marketplace add manuelschipper/nah@claude-marketplace --scope user && claude plugin install nah@nah --scope user",
+              "runs_vendor_code": true
+            }
+          ],
+          "host_support": [
+            "claude-code"
+          ],
+          "_note": "WARNING surfaced by nah: do NOT pair with `--dangerously-skip-permissions` / `--enable-auto-mode` — those bypass the guard entirely. Codex/Gemini guard = roadmap (nah is CC-first today)."
+        },
+        {
+          "tool": "gitleaks",
+          "display_name": "Gitleaks (secret detection)",
+          "ref": "github.com/gitleaks/gitleaks",
+          "license": "MIT",
+          "version": "v8.30.1",
+          "kind": "cli",
+          "purpose": "Fast (Go) regex+entropy secret scanner. Agent pipes staged content through `gitleaks ... stdin` before commit, or scans the repo. Structured JSON/SARIF output (file:line:rule:secret) = bounded, not a raw grep dump.",
+          "install": [
+            {
+              "label": "install gitleaks (brew)",
+              "cmd": "brew install gitleaks",
+              "_alt_docker": "docker pull ghcr.io/gitleaks/gitleaks:latest",
+              "runs_vendor_code": true
+            }
+          ],
+          "usage_hint": "cat <file> | gitleaks -v stdin   |   gitleaks detect --report-format json --report-path -",
+          "host_support": [
+            "claude-code",
+            "codex",
+            "gemini",
+            "aider"
+          ]
+        },
+        {
+          "tool": "osv-scanner",
+          "display_name": "OSV-Scanner (dependency vuln audit)",
+          "ref": "github.com/google/osv-scanner",
+          "license": "Apache-2.0",
+          "version": "v2.3.8",
+          "kind": "cli",
+          "purpose": "Google's multi-language dependency vulnerability scanner (npm/PyPI/cargo/Go/…) against the OSV database. Catches a known-bad dep BEFORE the agent runs `npm i`/`pip install`. Repo ships AGENTS.md + llms.txt = explicitly agent-aware. Structured advisory JSON.",
+          "install": [
+            {
+              "label": "install osv-scanner (go)",
+              "cmd": "go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest",
+              "_alt_binary": "download from github.com/google/osv-scanner/releases",
+              "runs_vendor_code": true
+            }
+          ],
+          "usage_hint": "osv-scanner scan source -r --format json .",
+          "host_support": [
+            "claude-code",
+            "codex",
+            "gemini",
+            "aider"
+          ]
+        },
+        {
+          "tool": "infisical",
+          "display_name": "Infisical CLI (secret injection)",
+          "ref": "github.com/Infisical/infisical",
+          "license": "MIT",
+          "version": "v0.160.10",
+          "kind": "cli",
+          "purpose": "Injects secrets as environment variables at runtime via `infisical run -- <cmd>`. The agent calls APIs/tools that need credentials WITHOUT the raw secret ever entering the prompt/context. Directly serves the Permissions principle: least-exposure of secrets.",
+          "install": [
+            {
+              "label": "install infisical (winget)",
+              "cmd": "winget install infisical",
+              "_alt_brew": "brew install infisical/get-cli/infisical",
+              "_alt_npm": "npm install -g @infisical/cli",
+              "_alt_scoop": "scoop bucket add org https://github.com/Infisical/scoop-infisical.git ; scoop install infisical",
+              "runs_vendor_code": true
+            }
+          ],
+          "usage_hint": "infisical run -- <command-that-needs-secrets>",
+          "host_support": [
+            "claude-code",
+            "codex",
+            "gemini",
+            "aider"
+          ]
+        }
+      ],
+      "compat_notes": "CURATION VALUE — four NON-overlapping guard layers, all CLI/hook (0 MCP def): (1) nah = action guard (PreToolUse, blocks dangerous shell), (2) gitleaks = secret EGRESS guard (don't commit keys), (3) osv-scanner = dependency INGRESS guard (don't install malware), (4) infisical = secret EXPOSURE guard (don't put raw keys in context). No collision: only nah touches PreToolUse; the three CLIs are invoked on demand and add no host hook. OPTIONAL hardening (not in core set, heavier): microsandbox (libkrun microVM, hardware isolation) for true sandboxed exec; ggshield if you need ACTIVE secret validation (500+ vendor APIs) beyond gitleaks detection. EXCLUSIVE: gitleaks ⊕ detect-secrets (pick one detector; gitleaks = speed, detect-secrets = baseline-accept-existing workflow). Full-set host = claude-code (nah is CC-only today); codex/gemini/aider get the 3 CLIs (gitleaks/osv/infisical) without the action-guard until nah expands.",
+      "verified": {
+        "date": "2026-06-08",
+        "status": "verified — install-tested end-to-end (bench/guides/10-installs.md). All 4 tools on PATH, gate PASS.",
+        "schema_validated": "2026-06-05",
+        "refs_confirmed": "2026-06-05 — gh + README verified: nah 449★ v0.9.0 MIT; gitleaks 27.5k★ v8.30.1 MIT; osv-scanner 10.4k★ v2.3.8 Apache-2.0; infisical 27.2k★ v0.160.10. Install commands quoted from official READMEs/docs.",
+        "config_block_confirmed": "nah wired (9 matchers × 3 hook events) into ~/.claude/settings.json; gitleaks/osv-scanner/infisical = CLI on PATH.",
+        "install_gate": "PASS — nah 0.9.1, gitleaks 8.30.1, osv-scanner 2.3.8, infisical 0.43.91",
+        "token_profile_benchmarked": false,
+        "hosts_verified": [
+          "claude-code"
+        ],
+        "hosts_tool_supported": [
+          "claude-code",
+          "codex",
+          "gemini",
+          "aider"
+        ],
+        "hosts_full_set_intersection": [
+          "claude-code"
+        ]
+      }
+    },
+    {
+      "set_name": "context-quality",
+      "description": "Anti-hallucination knowledge layer: live, version-correct library docs injected on demand. Stops the agent inventing APIs / using stale method signatures. Single lean MCP (2 tool-defs) — does NOT touch local code (complements codegraph: external docs vs in-repo graph).",
+      "_criterion_note": "Axis = IMPROVE CONTEXT QUALITY (the second half of paw's core gate). Context7 is widely cited as the highest-impact MCP for code-quality because hallucinated/outdated API usage is a top failure mode. Token angle: it FETCHES only the needed doc slice on demand (progressive disclosure) rather than the agent guessing then debugging — fewer wasted correction loops. 2 tool-defs = N1-safe.",
+      "trigger_terms": [
+        "library docs",
+        "api reference",
+        "how to use",
+        "version",
+        "package",
+        "framework",
+        "sdk",
+        "latest api",
+        "documentation",
+        "import",
+        "deprecated"
+      ],
+      "token_profile": {
+        "method": "measured = ccusage A/B (portaw bench --ab/--how) on the set's canonical workload, or command-level rtk-gain instrumentation. calculated = tiktoken (cl100k_base proxy) on the verbatim live MCP tool-def JSON the host loads (host tokenizers vary ~10-15%). vendor-claimed = from vendor docs, unverified. estimated = reasoned, not measured. neutral = 0 MCP tool-defs by construction (CLI/hook), idle schema cost provably zero. delta_pct = signed % tokens saved (+ = saved); idle_def_tokens = always-on tool-def cost on load-all hosts (0 on Claude Code, which lazy-loads).",
+        "hosts": {
+          "claude-code": {
+            "provenance": "calculated",
+            "delta_pct": null,
+            "idle_def_tokens": 0,
+            "sample": "2 Context7 defs lazy-loaded on CC -> idle ~0; full cost (927 tok) only when surfaced.",
+            "note": "On-demand doc fetch replaces guess-then-fix loops (quality-primary). See codex/gemini for the load-all idle cost."
+          },
+          "codex": {
+            "provenance": "calculated",
+            "delta_pct": null,
+            "idle_def_tokens": 927,
+            "sample": "tiktoken cl100k_base on verbatim live def JSON 2026-06-06: resolve-library-id 611 + query-docs 316 = 927 tok.",
+            "note": "ALWAYS-ON cost on load-all host (defs loaded at startup). Host tokenizer (GPT o200k) differs from cl100k proxy ~10-15%. Net acceptable: 927 tok buys anti-hallucination doc grounding (2 tools, under N1 ceiling)."
+          },
+          "gemini": {
+            "provenance": "calculated",
+            "delta_pct": null,
+            "idle_def_tokens": 927,
+            "sample": "same def JSON, cl100k proxy = 927 tok; Gemini tokenizer differs.",
+            "note": "ALWAYS-ON on load-all host; same trade as codex."
+          }
+        }
+      },
+      "mcp": [
+        {
+          "tool": "context7",
+          "display_name": "Context7 (live library docs)",
+          "ref": "@upstash/context7-mcp",
+          "version": "latest",
+          "kind": "mcp-stdio",
+          "purpose": "Two tools: resolve-library-id (name → Context7 id) + query-docs (id → current docs). Pulls version-correct docs for the exact package in use, killing API hallucination. Local stdio via npx; remote endpoint https://mcp.context7.com/mcp also available.",
+          "config_source": "https://context7.com/docs/resources/all-clients",
+          "_config_source_note": "mcp_config below = canonical local-stdio shape from official README (npm @upstash/context7-mcp). Verify against client-specific setup page before relying on it.",
+          "mcp_config": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "@upstash/context7-mcp"
+            ],
+            "env": {}
+          },
+          "auth": {
+            "required": false,
+            "_note": "API key OPTIONAL — free key at context7.com/dashboard raises rate limits. If used, inject via env CONTEXT7_API_KEY as a ${VAR} ref, NEVER plaintext in config (spec §security). env stays {} when keyless.",
+            "env_var": "CONTEXT7_API_KEY"
+          },
+          "tool_count": 2,
+          "self_installs": false
+        }
+      ],
+      "non_mcp": [],
+      "compat_notes": "CURATION VALUE — pairs cleanly with efficiency-starter: Context7 = EXTERNAL library knowledge (docs on the internet), codegraph = INTERNAL code knowledge (your repo's graph). No overlap, no host-surface collision (Context7 adds 2 MCP tools, no hook). Stacking note (N1): if a user installs efficiency-starter + context-quality together on a LOAD-ALL host (Codex/Gemini), total active MCP servers = 2 (codegraph + context7) = within the ≤2-3 ceiling; adding a 3rd MCP server later needs a ceiling check. NOT bundled with GitHub MCP (87 tools = blows budget) — if code-search is wanted, use a thin search_code-only wrapper (backlog build-op #4), not the full GitHub MCP.",
+      "verified": {
+        "date": "2026-06-08",
+        "status": "verified — install-tested end-to-end (bench/guides/10-installs.md). MCP patched into ~/.claude.json, verify gate PASS (config-only, runtime probe via npx).",
+        "schema_validated": "2026-06-05",
+        "refs_confirmed": "2026-06-05 — gh: upstash/context7 56.7k★, npm @upstash/context7-mcp, 2 tools (resolve-library-id, query-docs) confirmed via README + matches live mcp__context7__ tool surface.",
+        "config_block_confirmed": "2026-06-08 — npx @upstash/context7-mcp patched into ~/.claude.json mcpServers.context7 via portaw patcher (backup .claude.json.paw-bak-20260608T122104Z). Canonical shape from README (command npx, args [-y, @upstash/context7-mcp]).",
+        "install_gate": "PASS (config-only — Context7 has no static health_binary; runtime-fetched via npx at session load)",
+        "token_profile_benchmarked": false,
+        "hosts_verified": [
+          "claude-code"
+        ],
+        "hosts_tool_supported": [
+          "claude-code",
+          "codex",
+          "gemini",
+          "cursor"
+        ],
+        "hosts_full_set_intersection": [
+          "claude-code",
+          "codex",
+          "gemini",
+          "cursor"
+        ]
+      }
+    },
+    {
+      "set_name": "design-quality",
+      "description": "For anyone shipping UI who wants to kill 'AI slop' and keep design fidelity. Catches the visual tells of machine-made frontends (purple gradients, bounce easing, cramped padding, dark glows, skipped headings, tiny touch targets) BEFORE they ship, and pulls real design tokens from Figma into code. Saves tokens by replacing guess-restyle-reguess loops with one deterministic audit pass.",
+      "_axis_note": "axis = ↑quality (NOT token-primary). 0 MCP tool-defs → N1-free, 0 idle on every host. Stacks freely with efficiency-starter/secure-agent.",
+      "trigger_terms": [
+        "design",
+        "ui",
+        "frontend",
+        "css",
+        "tailwind",
+        "component",
+        "ai slop",
+        "slop",
+        "polish",
+        "design audit",
+        "design tokens",
+        "figma",
+        "spacing",
+        "padding",
+        "accessibility",
+        "touch target",
+        "visual",
+        "redesign"
+      ],
+      "token_profile": {
+        "method": "measured = ccusage A/B (portaw bench --ab/--how) on the set's canonical workload, or command-level rtk-gain instrumentation. calculated = tiktoken (cl100k_base proxy) on the verbatim live MCP tool-def JSON the host loads (host tokenizers vary ~10-15%). vendor-claimed = from vendor docs, unverified. estimated = reasoned, not measured. neutral = 0 MCP tool-defs by construction (CLI/hook), idle schema cost provably zero. delta_pct = signed % tokens saved (+ = saved); idle_def_tokens = always-on tool-def cost on load-all hosts (0 on Claude Code, which lazy-loads).",
+        "hosts": {
+          "claude-code": {
+            "provenance": "neutral",
+            "delta_pct": null,
+            "idle_def_tokens": 0,
+            "sample": "0 MCP servers (all skill/CLI).",
+            "note": "Quality-primary. Secondary ↓token: /impeccable audit catches slop in ONE deterministic pass vs many restyle-reguess round-trips (unmeasured, upside). 0 MCP idle."
+          },
+          "codex": {
+            "provenance": "neutral",
+            "delta_pct": null,
+            "idle_def_tokens": 0,
+            "sample": "0 MCP servers (all skill/CLI).",
+            "note": "0 MCP defs even on load-all host; skill/CLI invoked on demand."
+          },
+          "gemini": {
+            "provenance": "neutral",
+            "delta_pct": null,
+            "idle_def_tokens": 0,
+            "sample": "0 MCP servers (all skill/CLI).",
+            "note": "same — neutral by construction."
+          }
+        }
+      },
+      "mcp": [],
+      "non_mcp": [
+        {
+          "tool": "impeccable",
+          "display_name": "Impeccable",
+          "kind": "skill",
+          "ref": "pbakaus/impeccable",
+          "health_binary": null,
+          "purpose": "Anti-AI-slop design audit. 27 deterministic anti-pattern rules + 12-rule LLM critique pass. Slash: /impeccable audit|polish|critique. CLI: npx impeccable detect src/. No API key for the deterministic rules.",
+          "host_support": [
+            "claude-code",
+            "codex",
+            "cursor",
+            "opencode",
+            "gemini"
+          ],
+          "install": [
+            {
+              "label": "install impeccable skill into the harness (.claude/ etc.)",
+              "cmd": "npx impeccable skills install",
+              "runs_vendor_code": true
+            }
+          ],
+          "_verified": "README pbakaus/impeccable 2026-06-06: skill-based (non-MCP), cross-harness, /impeccable + npx detect. anti-slop = 24 tells across AI-slop + general design quality."
+        },
+        {
+          "tool": "figtree-cli",
+          "display_name": "Figtree CLI",
+          "kind": "cli",
+          "ref": "tortastudios/figtree-cli",
+          "health_binary": "figtree",
+          "purpose": "Extract design tokens from Figma → CSS/SCSS/Tailwind/SwiftUI/Android/JSON. No Figma plugin / Dev Mode needed. Keeps implemented UI faithful to the design source (fidelity = quality axis).",
+          "host_support": [
+            "claude-code",
+            "codex",
+            "cursor",
+            "gemini"
+          ],
+          "needs_env": [
+            "FIGMA_TOKEN"
+          ],
+          "install": [
+            {
+              "label": "install figtree CLI globally",
+              "cmd": "npm install -g figtree-cli",
+              "runs_vendor_code": true
+            }
+          ],
+          "_secret_note": "Needs a Figma personal access token in .env as FIGMA_TOKEN (or --token). NEVER hardcode — env/.env only (paw security rule). Optional only if the user works from Figma.",
+          "_verified": "README tortastudios/figtree-cli 2026-06-06: plain CLI (non-MCP), npm -g, FIGMA_TOKEN env, multi-format output."
+        }
+      ],
+      "optional_sources": [
+        {
+          "tool": "open-design",
+          "ref": "nexu-io/open-design",
+          "stars": "57k",
+          "note": "OSS Claude-Design-alt PLATFORM (agent-agnostic SKILL.md/DESIGN.md, 259 skills, 142 design systems). Too heavy to bundle whole; treat as a SKILLS SOURCE — curate specific DESIGN.md systems into this set later. Apache-2.0."
+        }
+      ],
+      "compat_notes": "All tools non-MCP (skill + CLI) → 0 MCP tool-defs, 0 host-surface collision. N1-free: stacks with efficiency-starter + secure-agent on a load-all host without touching the ≤2-3 MCP ceiling. impeccable = the anchor (no key, deterministic); figtree-cli = optional, only for Figma-driven teams (needs FIGMA_TOKEN). open-design = a skills SOURCE to mine, not bundled.",
+      "verified": {
+        "date": "2026-06-08",
+        "status": "verified — install-tested end-to-end (bench/guides/10-installs.md). impeccable v2.3.2: installed + `npx impeccable detect` runs (no frontend src/ in test project, CLI confirmed working). figtree-cli: optional, skipped (needs FIGMA_TOKEN, expected MISSING in verify). open-design: deferred (skills source, not bundled).",
+        "hosts": [
+          "claude-code"
+        ],
+        "impeccable": "verified (v2.3.2, npx impeccable skills install, detect CLI functional)",
+        "figtree-cli": "optional/untested (needs FIGMA_TOKEN)"
+      }
+    },
+    {
+      "set_name": "web-research",
+      "description": "Token-lean web research: fetch + EXTRACT clean content (markdown, not raw-HTML dumps) and composable search, so the agent does its own research cheaply. Curates research PRIMITIVES the agent composes (search -> fetch -> extract, sources auditable), NOT an opaque answer-product connector that hides sourcing.",
+      "_axis_note": "axis = BOTH halves of paw's gate. (1) DOWN-token: TARGETED extract (css-selector/semantic rank) returns only the relevant slice instead of a whole page the agent must scroll. (2) UP-quality: agent composes + can audit every source (no black-box synthesis). THE LINE (principled, not inherited from a drop-list): paw curates research PRIMITIVES (search/fetch/extract you compose and verify) and REJECTS answer-product connectors (perplexity-class) that synthesize the answer with opaque sourcing — those replace the agent's reasoning and defeat the same anti-hallucination axis as context-quality. This is why exa (composable search primitive) is allowed-but-optional while perplexity stays out, even though both are paid SaaS APIs: the split is primitive-vs-answer-product, not paid-vs-free. REDUNDANCY FLAG (advisor 2026-06-07): the plain Fetch anchor is NOT a token win where the HOST already ships a digest-fetch — Claude Code's native WebFetch already does URL->markdown->small-model-digest, so on CC the set's real value is the ADDITIVE rungs (Scrapling targeted/stealth extract, firecrawl JS-render, exa semantic), not Fetch. Fetch earns its keyless-anchor slot mainly on hosts WITHOUT a native digest-fetch (load-all hosts), where its 259-tok idle buys a capability CC gets for free. The token lever is targeted-extract-vs-full-page, NOT clean-vs-raw (no host emits raw-HTML dumps).",
+      "trigger_terms": [
+        "research",
+        "search web",
+        "web search",
+        "scrape",
+        "fetch url",
+        "web page",
+        "crawl",
+        "extract content",
+        "look up online",
+        "find information",
+        "documentation online",
+        "read article"
+      ],
+      "token_profile": {
+        "method": "measured = ccusage A/B (portaw bench --ab/--how) on the set's canonical workload, or command-level rtk-gain instrumentation. calculated = tiktoken (cl100k_base proxy) on the verbatim live MCP tool-def JSON the host loads (host tokenizers vary ~10-15%). vendor-claimed = from vendor docs, unverified. estimated = reasoned, not measured. neutral = 0 MCP tool-defs by construction (CLI/hook), idle schema cost provably zero. delta_pct = signed % tokens saved (+ = saved); idle_def_tokens = always-on tool-def cost on load-all hosts (0 on Claude Code, which lazy-loads).",
+        "hosts": {
+          "claude-code": {
+            "provenance": "measured",
+            "delta_pct": null,
+            "idle_def_tokens": 0,
+            "sample": "3-lane A/B RAN 2026-06-08 (deterministic tiktoken cl100k on saved tool-returns, bench/_count_tokens.py; 3 fixed URLs: PEP8 + json docs + click README; n=1, content-stable). COMPLETE lanes only: native 16,182 tok vs Scrapling-broad 21,025 vs Scrapling-TIGHT 2,599. Fetch MCP = 2,858 but DISQUALIFIED (max_length=5000 TRUNCATED 2/3 pages → failed completeness: PEP8 line-length+binary-op cut, json params cut mid-list).",
+            "note": "delta_pct=null DELIBERATELY: no GENERAL one-shot token win on CC. Findings: (1) native WebFetch beats plain Fetch (truncates→incomplete) AND broad Scrapling (whole-section selector 21,025 > native 16,182). → Fetch DEMOTED on CC (keep as load-all-only anchor). (2) Scrapling with TIGHT oracle selectors = 2,599 tok = ~84% < native, STILL COMPLETE = the targeted-extract lever is REAL at the CEILING. BUT ceiling hides DISCOVERY COST: selectors were picked knowing where answers live; a real agent must fetch the page first to find the selector (≈ one native fetch) → amortized one-shot cost > native. So the CC value = targeted extract ONLY for (a) repeated/known-structure pages, (b) JS-render pages native can't read — a CAPABILITY rung, not a general saver. idle 0 on CC (Fetch lazy-loads). Full run: registry/deep-vet.md web-research section; artifacts bench/out/."
+          },
+          "codex": {
+            "provenance": "calculated",
+            "delta_pct": null,
+            "idle_def_tokens": 259,
+            "sample": "tiktoken cl100k_base on verbatim live Fetch def JSON 2026-06-07 (modelcontextprotocol/servers list_tools): name+description+inputSchema = 259 tok (1059 chars). bench/_fetch_def_count.py.",
+            "note": "Load-all host pays this 259 at startup. LEANEST MCP anchor in any paw set (1 tool; cf. semble 509, Context7 927, codegraph 1615). Host-conditional like efficiency-starter: keep this no-key anchor on load-all; add at most ONE keyed extra (exa/firecrawl) at a time. delta_pct (clean-md vs raw-HTML) still PENDING A/B."
+          },
+          "gemini": {
+            "provenance": "calculated",
+            "delta_pct": null,
+            "idle_def_tokens": 259,
+            "sample": "same Fetch def JSON, cl100k proxy = 259 tok; Gemini tokenizer differs ~10-15%.",
+            "note": "ALWAYS-ON 259 on load-all host; same lean trade as codex. delta_pct PENDING A/B."
+          }
+        }
+      },
+      "mcp": [
+        {
+          "tool": "fetch",
+          "display_name": "Fetch (HTML -> markdown)",
+          "ref": "modelcontextprotocol/servers (src/fetch)",
+          "version": "latest",
+          "kind": "mcp-stdio",
+          "health_binary": "uvx",
+          "purpose": "Official reference MCP, ONE tool (`fetch`): pulls a URL and returns it as clean markdown instead of raw HTML. The lean, no-key extraction anchor — the agent reads only the readable content, not boilerplate/script/style noise. This is the on-thesis core: token cut by construction.",
+          "config_source": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
+          "_config_source_note": "mcp_config below = canonical `uvx mcp-server-fetch` shape from the reference-servers README. NOT yet captured via a host --print-config; treat as DRAFT until verified (config_block_confirmed=false).",
+          "mcp_config": {
+            "type": "stdio",
+            "command": "uvx",
+            "args": [
+              "mcp-server-fetch"
+            ],
+            "env": {}
+          },
+          "auth": {
+            "required": false,
+            "_note": "No API key. Optional: --ignore-robots-txt / custom user-agent per README."
+          },
+          "tool_count": 1,
+          "idle_def_tokens": 259,
+          "self_installs": false,
+          "_verified": "2026-06-07 — def CAPTURED verbatim from modelcontextprotocol/servers list_tools(): 1 tool `fetch` (url required; max_length/start_index/raw optional). tiktoken cl100k = 259 tok (bench/_fetch_def_count.py). `verify` PASS (uvx on PATH). Per-host --print-config block still not captured (canonical uvx mcp-server-fetch shape from README)."
+        }
+      ],
+      "non_mcp": [],
+      "optional_sources": [
+        {
+          "tool": "scrapling",
+          "kind": "cli (preferred) + mcp",
+          "kind_axis": "adaptive extract (keyless)",
+          "ref": "D4Vinci/Scrapling",
+          "note": "FIRST rung — keyless adaptive extractor. CLI survives layout changes + pulls TARGETED content via css-selector (cut tokens vs full page), and as a CLI it is 0 idle def on load-all hosts. PREFER THE CLI: the built-in MCP exposes 10 tools (get/bulk_get/fetch/bulk_fetch/stealthy_fetch/bulk_stealthy_fetch/screenshot/open_session/close_session/list_sessions) = NOT lean (idle est. ~codegraph-class, 10 defs), so on load-all hosts use the CLI (0 idle). MCP form reserved for CC (lazy) if you want sessions/screenshot.",
+          "install": [
+            "pip install \"scrapling[all]\"",
+            "scrapling install"
+          ],
+          "cli_usage": "scrapling extract get 'https://example.com' out.md   |   scrapling extract fetch 'URL' out.md --css-selector '#main'   |   scrapling extract stealthy-fetch 'URL' out.html",
+          "mcp_config": {
+            "command": "scrapling",
+            "args": [
+              "mcp"
+            ],
+            "env": {}
+          },
+          "needs_env": [],
+          "axis": "down-token (targeted extract; CLI = 0 idle def on load-all)",
+          "_verified": "2026-06-07 — CLI commands + install from README; MCP config `scrapling mcp` + 10-tool list from scrapling.readthedocs.io/ai/mcp-server. Exact per-tool def-token count needs a live schema dump (not captured — WebFetch paraphrases); 10 tools => treat MCP form as heavy. CLI form fully VERIFIED."
+        },
+        {
+          "tool": "searxng-mcp",
+          "kind": "mcp",
+          "kind_axis": "search primitive (keyless, self-host)",
+          "ref": "ihor-sokoliuk/mcp-searxng",
+          "note": "Keyless SEARCH primitive: self-hosted SearXNG metasearch. The on-thesis search rung when you won't use a SaaS key. Cost = you run a SearXNG instance and enable JSON format in its settings.yml. 2 tools (searxng_web_search + web_url_read) = lean (idle est. ~semble-class 2-tool ≈ 400-550 tok; exact count needs live dump). Strong candidate to promote to default-on alongside Fetch IF the keyless-search need is common.",
+          "mcp_config": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "mcp-searxng"
+            ],
+            "env": {
+              "SEARXNG_URL": "${SEARXNG_URL}"
+            }
+          },
+          "needs_env": [
+            "SEARXNG_URL"
+          ],
+          "axis": "down-token + up-quality (ranked results, no key, composable, auditable)",
+          "_verified": "2026-06-07 — config from ihor-sokoliuk/mcp-searxng README (npx -y mcp-searxng, env SEARXNG_URL); 2 tools (searxng_web_search + web_url_read) confirmed from src. Requires a running SearXNG with JSON format enabled. Exact def-token count needs a live schema dump (deferred — needs an instance; WebFetch paraphrases descriptions, can't yield a clean calculated count)."
+        },
+        {
+          "tool": "exa-mcp",
+          "kind": "mcp",
+          "kind_axis": "search primitive (key-required)",
+          "ref": "exa-labs/exa-mcp-server",
+          "note": "Keyed semantic-search PRIMITIVE: web_search_exa + web_fetch_exa (web_search_advanced_exa disabled by default). Returns ranked results + contents the agent composes. ON the primitive side of the line (composable, auditable sources) — this is the principled reason it is IN while perplexity (answer-product) is OUT, NOT because of price (both are paid SaaS). OPT-IN: needs EXA_API_KEY.",
+          "mcp_config": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "exa-mcp-server"
+            ],
+            "env": {
+              "EXA_API_KEY": "${EXA_API_KEY}"
+            }
+          },
+          "needs_env": [
+            "EXA_API_KEY"
+          ],
+          "axis": "down-token + up-quality (semantic rank cuts junk; composable, auditable sources)",
+          "_verified": "2026-06-07 — config + tools + env from exa-labs/exa-mcp-server README (npx -y exa-mcp-server, EXA_API_KEY). Def-token count PENDING (3 tools, 1 disabled)."
+        },
+        {
+          "tool": "firecrawl",
+          "kind": "rest-api (lean) | mcp (heavy)",
+          "kind_axis": "JS-heavy extract (key-required)",
+          "ref": "firecrawl/firecrawl-mcp-server",
+          "note": "LAST rung — only for JS/SPA pages Fetch + Scrapling can't render. CORRECTION 2026-06-07: the firecrawl MCP has NO scrape-only subset switch — it loads ALL ~12 tools (scrape/batch/map/search/crawl/extract/agent/monitor...) = N1-BLOWING, so the lean form is NOT the MCP. For lean use call the REST scrape endpoint directly (curl https://api.firecrawl.dev/v1/scrape -> clean md, 0 idle def). Reserve the full MCP for CC-only (lazy) if you truly need crawl/map. Key-required.",
+          "rest_usage": "curl -X POST https://api.firecrawl.dev/v1/scrape -H \"Authorization: Bearer ${FIRECRAWL_API_KEY}\" -H 'Content-Type: application/json' -d '{\"url\":\"...\",\"formats\":[\"markdown\"]}'",
+          "mcp_config": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "firecrawl-mcp"
+            ],
+            "env": {
+              "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}"
+            }
+          },
+          "needs_env": [
+            "FIRECRAWL_API_KEY"
+          ],
+          "axis": "down-token via REST scrape (lean); MCP form is heavy/no-subset (CC-only if needed)",
+          "_verified": "2026-06-07 — MCP config + full tool list (~12) from firecrawl/firecrawl-mcp-server README. No tool-subset switch FOUND IN THE README (absence-of-evidence from one page, NOT proof firecrawl lacks it). Regardless, the safe lean path is the REST scrape endpoint, not the full MCP; the earlier 'lean MCP subset' wording was unsupported."
+        }
+      ],
+      "rejected": [
+        {
+          "tool": "perplexity / SaaS answer connectors (notion/slack search)",
+          "reason": "OFF-THESIS by the primitive-vs-answer-product line: these synthesize the answer with opaque sourcing (perplexity) or are SaaS workspace connectors (notion/slack) = general-installer / Smithery territory, not a token-or-quality lever the agent composes. Holding this line IS paw's identity vs a generic MCP installer.",
+          "axis": "neither (capability/convenience, not down-token or up-quality)"
+        },
+        {
+          "tool": "playwright-mcp (full)",
+          "reason": "47-tool MCP = N1-blowing; browser DRIVING is a capability, not a research-token lever. The lean browser need (read page text, snapshot) belongs in a future browser-automation set anchored on browser-harness (0 idle def), NOT here.",
+          "axis": "capability-class"
+        }
+      ],
+      "compat_notes": "CURATION VALUE — a keyless LEAN core + a flagged ladder. Default-on = Fetch MCP only (1 tool, no key, HTML->md, 259 tok CALCULATED idle on load-all / 0 on CC) so the set is N1-trivial and certain. optional_sources = an explicit ladder, keyless rungs FIRST: Scrapling CLI (keyless adaptive extract, 0 idle) -> SearXNG (keyless self-host search) -> exa (keyed semantic search) -> firecrawl (keyed, JS-heavy ONLY; lean path = REST scrape endpoint, NOT the ~12-tool MCP which has no subset switch). N1 on load-all hosts: keep the keyless anchor active; add at most ONE keyed extra at a time. Pairs cleanly with context-quality (Context7 = curated lib docs; web-research = open web) and efficiency-starter (in-repo graph) — three non-overlapping knowledge surfaces. Formalizes the firecrawl+exa research pattern the ecc deep-research skill already uses, curated onto paw's token/quality axis.",
+      "verified": {
+        "date": "2026-06-08",
+        "status": "DRAFT (CC A/B DONE 2026-06-08). thesis line locked (primitive vs answer-product). Fetch anchor def CAPTURED + tiktoken'd (259 tok, calculated idle). optional configs VERIFIED from READMEs: Scrapling CLI, searxng-mcp, exa-mcp. **CC 3-lane A/B RAN** (deterministic file-tokenize, n=1 content-stable): native 16,182 beats Fetch (truncated→incomplete, DEMOTED on CC) and broad-Scrapling (21,025); TIGHT-selector Scrapling 2,599 (~84% < native, complete) = ceiling lever real BUT hides discovery cost → CC = capability rung, no general delta_pct. STILL PENDING before full 'verified': (1) per-host --print-config for Fetch, (2) def-token counts for optional MCPs (need keys/instances), (3) load-all-host value confirmation (Fetch's 259-idle buys capability Codex/Gemini lack natively — calculated, not A/B'd).",
+        "config_block_confirmed": "partial — optional MCP config shapes verified from READMEs; Fetch per-host --print-config still to capture",
+        "token_profile_benchmarked": "partial — CC MEASURED 2026-06-08 (3-lane, deterministic tiktoken, bench/web-research-workload.md + bench/guides/01-03). load-all hosts = calculated idle only.",
+        "idle_calculated": "Fetch 259 tok cl100k (load-all); 0 on CC. optional MCP defs not yet tokenized.",
+        "hosts": [
+          "claude-code"
+        ]
+      }
+    },
+    {
+      "set_name": "browser-automation",
+      "description": "Lean browser-DRIVING capability for agents that must actually use a real browser (fill forms, upload files, navigate JS/SPA flows, scrape pages JS-render breaks). A thin self-healing CDP harness driven as a skill — ZERO MCP tool-defs — instead of the heavy playwright-MCP (47 tools) that blows the N1 ceiling for the same capability.",
+      "_axis_note": "axis = CAPABILITY-CLASS, curated on the LEAN-vs-HEAVY lever (same frame as web-research's Fetch anchor). Honest: browser automation is NOT a runtime token-saver by construction; the on-thesis lever is IDLE-DEF — browser-harness adds browser control at 0 MCP tool-defs (skill + a single CDP websocket the agent scripts), vs playwright-MCP's 47 always-on tool-defs for the SAME job. So paw's value = you get the capability without paying 47-tool idle on load-all hosts. SECONDARY ↑quality: the harness is self-healing — it writes missing helpers + per-site domain-skills during execution and reuses them next run, cutting re-derivation loops. NOT over-claimed as a token-saver; curated because it fills the browser-capability gap LEANLY where the obvious alternative is N1-blowing.",
+      "trigger_terms": [
+        "browser",
+        "browser automation",
+        "navigate",
+        "click",
+        "fill form",
+        "upload file",
+        "web form",
+        "login flow",
+        "scrape page",
+        "spa",
+        "javascript page",
+        "headless",
+        "chrome",
+        "cdp",
+        "playwright",
+        "puppeteer",
+        "web task"
+      ],
+      "token_profile": {
+        "method": "measured = ccusage A/B (portaw bench --ab/--how) on the set's canonical workload, or command-level rtk-gain instrumentation. calculated = tiktoken (cl100k_base proxy) on the verbatim live MCP tool-def JSON the host loads (host tokenizers vary ~10-15%). vendor-claimed = from vendor docs, unverified. estimated = reasoned, not measured. neutral = 0 MCP tool-defs by construction (CLI/hook/skill), idle schema cost provably zero. delta_pct = signed % tokens saved (+ = saved); idle_def_tokens = always-on tool-def cost on load-all hosts (0 on Claude Code, which lazy-loads).",
+        "hosts": {
+          "claude-code": {
+            "provenance": "neutral",
+            "delta_pct": null,
+            "idle_def_tokens": 0,
+            "sample": "0 MCP servers in set (browser-harness = skill + direct CDP websocket; agent scripts agent-workspace Python).",
+            "note": "Token cost provably zero: no MCP tool-defs loaded on any host. The SKILL.md/install.md content loads ON DEMAND when the browser task is surfaced (progressive disclosure), NOT idle. Contrast playwright-MCP = 47 tool-defs always-on. delta_pct intentionally null: this is a capability, not a token-saver — do NOT fabricate one."
+          },
+          "codex": {
+            "provenance": "neutral",
+            "delta_pct": null,
+            "idle_def_tokens": 0,
+            "sample": "0 MCP defs (skill + CDP).",
+            "note": "0 MCP idle even on load-all host — this IS the curation lever vs playwright-MCP's 47-tool idle. Harness driven by the agent writing/running Python against one CDP websocket."
+          },
+          "gemini": {
+            "provenance": "neutral",
+            "delta_pct": null,
+            "idle_def_tokens": 0,
+            "sample": "0 MCP defs (skill + CDP).",
+            "note": "same — neutral by construction. (browser-harness setup prompt documents Claude Code + Codex; Gemini support UNVERIFIED — see verified.status.)"
+          }
+        }
+      },
+      "mcp": [],
+      "non_mcp": [
+        {
+          "tool": "browser-harness",
+          "display_name": "Browser Harness",
+          "kind": "skill",
+          "ref": "browser-use/browser-harness",
+          "license": "MIT",
+          "version": "pin-at-install",
+          "health_binary": null,
+          "purpose": "Thin, editable CDP harness: connects the LLM directly to a real Chrome over ONE websocket (nothing between). The agent drives the browser by writing/running Python in agent-workspace, and the harness self-heals — it writes missing helpers + per-site domain-skills during execution and reuses them next run. ~1k lines across 4 core files. 0 MCP tool-defs (skill, not a server).",
+          "config_source": "https://github.com/browser-use/browser-harness (install.md + SKILL.md)",
+          "_config_source_note": "Install is AGENT-DRIVEN, not a clean package one-liner: the README's documented path is to paste a setup prompt that tells the agent to read install.md and follow it (clones repo, installs the browser_harness package, bootstraps Chrome remote-debugging). Requires the user to enable chrome://inspect/#remote-debugging + Allow the per-attach popup (Chrome 144+). NOT yet install-tested by paw.",
+          "host_support": [
+            "claude-code",
+            "codex"
+          ],
+          "needs_env": [],
+          "install": [
+            {
+              "label": "agent-driven setup (paste into Claude Code or Codex)",
+              "cmd": "Set up https://github.com/browser-use/browser-harness for me. Read `install.md` and follow the steps to install browser-harness and connect it to my browser.",
+              "_manual_user_step": "Open chrome://inspect/#remote-debugging, tick the checkbox, click Allow on the per-attach popup (Chrome 144+).",
+              "runs_vendor_code": true
+            }
+          ],
+          "optional_env": {
+            "BH_DOMAIN_SKILLS": "1 to enable agent-workspace/domain-skills (per-site playbooks goto_url surfaces by domain)",
+            "BROWSER_USE_API_KEY": "OPTIONAL — only for Browser Use Cloud (stealth / sub-agents / headless deploy; free tier 3 concurrent). Inject via env/.env ${VAR}, NEVER plaintext (paw security rule). Core local-Chrome use needs NO key."
+          },
+          "_verified": "2026-06-08 — gh + README browser-use/browser-harness: MIT, Python, 14.5k★. Self-healing CDP harness, ~1k LOC/4 files, skill-based (SKILL.md/install.md), 0 MCP def. Local Chrome use keyless; Browser Use Cloud key optional. Install mechanism = agent-driven setup prompt (NOT a pip/npm one-liner) — recorded honestly; end-to-end install NOT tested."
+        }
+      ],
+      "optional_sources": [
+        {
+          "tool": "dev-browser",
+          "kind": "skill",
+          "ref": "SawyerHood/dev-browser",
+          "license": "MIT",
+          "stars": "6.2k",
+          "note": "Sibling Claude Skill (TypeScript) that gives the agent a web browser. Lighter-weight CC-oriented alternative to browser-harness. Use when you want a simpler skill on Claude Code specifically; browser-harness is the cross-host (CC+Codex) self-healing anchor. Not bundled — alternative, pick one.",
+          "host_support": [
+            "claude-code"
+          ]
+        },
+        {
+          "tool": "browserbase-skills",
+          "kind": "skill (cloud-backed)",
+          "ref": "browserbase/skills",
+          "license": null,
+          "stars": "3.5k",
+          "note": "Official Browserbase agent-skills collection for cloud browsers (Stagehand). For when you need MANAGED/cloud browsers (scale, stealth, no local Chrome) — a PAID SaaS path. Keyed. Optional cloud rung, off the keyless-local default; record like web-research's keyed rungs.",
+          "needs_env": [
+            "BROWSERBASE_API_KEY"
+          ]
+        }
+      ],
+      "rejected": [
+        {
+          "tool": "playwright-mcp (full)",
+          "reason": "47-tool MCP = N1-BLOWING (always-on def cost on load-all hosts) for a capability browser-harness delivers at 0 MCP def. This set EXISTS to provide the lean form. Already recorded as rejected in web-research compat for the same reason.",
+          "axis": "capability-class, heavy (idle-def blow)"
+        },
+        {
+          "tool": "browser-use/browser-use (full framework)",
+          "reason": "The 97k-star parent FRAMEWORK is a full Python web-agent runtime (its own agent loop) — heavier and runtime-class, not a thin harness the host agent drives. browser-harness is the same authors' THIN CDP harness extracted for exactly the lean-vs-heavy reason. Use the harness, not the framework, inside a coding-agent host.",
+          "axis": "framework, not a tool/skill"
+        }
+      ],
+      "compat_notes": "CURATION VALUE — fills the browser-DRIVING capability gap at 0 MCP tool-defs. Anchor = browser-harness (skill + direct CDP, MIT, cross-host CC+Codex, self-healing). N1-free: 0 MCP defs → stacks with efficiency-starter/secure-agent/context-quality/web-research on any load-all host without touching the ≤2-3 MCP ceiling (this is the entire point vs playwright-MCP's 47). Pairs with web-research: web-research = read/fetch/extract content (no driving); browser-automation = ACT on a page (forms/uploads/flows) when reading isn't enough — non-overlapping. EXCLUSIVE: browser-harness ⊕ dev-browser (pick one browser skill; harness = cross-host+self-healing, dev-browser = simpler CC-only). browserbase-skills = optional CLOUD rung (keyed SaaS) only when local Chrome won't do. SECURITY: agent drives a REAL browser via CDP — treat as high-privilege (can act on logged-in sessions); pair with secure-agent's nah action-guard, and never hardcode the optional cloud key.",
+      "verified": {
+        "date": "2026-06-08",
+        "status": "DRAFT — refs verified (browser-use/browser-harness MIT 14.5k★, dev-browser MIT 6.2k★, browserbase/skills 3.5k★ via gh + README). 0-MCP-def claim verified by construction (skill + CDP, no server). NOT install-tested end-to-end; install is agent-driven (setup prompt → install.md), needs a live run to confirm + capture real steps. Gemini support UNVERIFIED (README documents CC+Codex only). delta_pct intentionally null (capability-class, not a token-saver — neutral idle is the honest profile).",
+        "config_block_confirmed": false,
+        "_config_block_note": "No MCP config to capture (non-MCP skill). Install steps are the agent-driven setup prompt + manual chrome://inspect enable — verify by running once on a real host.",
+        "token_profile_benchmarked": false,
+        "hosts": [
+          "claude-code"
+        ]
+      }
+    }
+  ]
+}
