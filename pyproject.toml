@@ -26,6 +26,15 @@ dependencies = [
   "tomlkit>=0.13",  # TOML write preserving comments (Codex config.toml). stdlib json + tomllib cover the rest.
 ]
 
+# Opt-in tier-2 semantic router (kernel/embed.py). The TF-IDF tier-1 floor needs
+# none of this; install only for cross-lingual / paraphrase recall.
+[project.optional-dependencies]
+embed = [
+  "onnxruntime>=1.16",
+  "tokenizers>=0.15",
+  "numpy>=1.24",
+]
+
 [project.scripts]
 portaw = "portaw.main:cli"
 

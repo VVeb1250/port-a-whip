@@ -124,9 +124,13 @@ build order — READ IT before touching L3). What landed:
    piped one-off — all skipped. The HONEST conclusion: high-value lessons come from REFLECTION,
    not Bash command-diffing (cf. the user's `mistakes-index.md` — semantic, curated). So:
    (a) **manual `memory add` is the proven, working capture path** (conf 0.9 → trusted → injects;
-   demoed live); (b) **NEXT high-value build = a `mistakes-index.md` → lessons harvester**
-   (analogous to `seed.py`'s ADR harvest — the user's index is the gold lesson source, already
-   curated + cross-project); (c) loosen the Bash detector only if (b) proves insufficient.
+   demoed live); (b) ~~**NEXT high-value build = a `mistakes-index.md` → lessons harvester**~~
+   **DONE 2026-06-10** (`portaw/memory/harvest.py` + `memory harvest` CLI, 13 tests): bullet grammar
+   `- [SEV] [id] trigger → fix (xN, date) →detail` → global lessons (sev→confidence, xN→recurrence,
+   section→applicability, →detail→detail_ref, code-spans→terms/symbols). Idempotent re-key by
+   content-hash id. LIVE on the real Thai index: 18 lessons, applicability correct, re-run not
+   inflated, full harvest→recall loop proven; (c) loosen the Bash detector only if (b) proves
+   insufficient — (b) works, so detector stays as-is.
 2. ~~**wire into real `~/.claude`** + **kernel-unify**~~ **DONE 2026-06-10.** capture-hook wired
    into CC Stop (settings.json, coexists w/ mistake-learning). kernel-unify resolved the
    inject collision WITHOUT a second hook: the live skill-router now (a) delegates ranking to
@@ -152,7 +156,13 @@ build order — READ IT before touching L3). What landed:
    best-guess for Codex/Gemini; verify before enabling memory capture there.
    Gemini router remains schema/unit-tested only. Cross-host = the portability
    moat proof.
-4. **embedding tier-2** — lazy/optional, reuse the skill-router multilingual model.
+4. ~~**embedding tier-2** — lazy/optional, reuse the skill-router multilingual model.~~ **DONE
+   2026-06-10** (`portaw/kernel/embed.py`, opt-in `[embed]` extra, 9 tests). MiniLM ONNX ported from
+   skill-router embed.py, skill-dict→Capability. Lazy (fires only on tier-1 miss) + fail-safe
+   (unavailable → TF-IDF floor, runtime deps unchanged). Injectable `embed_fn` into `route()` +
+   `recall()` (default None → parity 14/14 held). Reuses `~/.claude/hooks/models` (or
+   `$PAW_EMBED_MODEL_DIR`). `memory recall --embed` to exercise. LIVE: Thai→English cross-lingual
+   match proven (cosine 0.592 real pair, honest {} below 0.30 floor).
 5. **DOGFOOD-PENDING new item** — bench symbol+path-anchor precision vs codegraph multi-hop
    (is the multi-hop bonus worth its setup? expect ~80/20 in favor of the zero-setup floor).
 

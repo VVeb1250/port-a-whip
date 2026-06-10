@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import date
+from typing import Callable
 
 from portaw.kernel.ranking import Capability, RouteConfig, route
 from portaw.memory.anchors import AnchorQuery, overlap
@@ -94,6 +95,7 @@ def recall(
     ctx: RetrievalContext | None = None,
     cfg: RetrievalConfig | None = None,
     route_cfg: RouteConfig | None = None,
+    embed_fn: Callable[[str, list[Capability]], dict[str, float]] | None = None,
     today: date | None = None,
 ) -> list[Scored]:
     """Rank eligible entries for (prompt + edit-target). [] when nothing clears the floor.
@@ -114,7 +116,7 @@ def recall(
     # fold the edit-target symbols/paths into the routing text → kernel sees them
     route_query = " ".join([prompt, query.as_text()]).strip()
     caps = _lesson_caps(eligible)
-    hits = route(route_query, caps, route_cfg)
+    hits = route(route_query, caps, route_cfg, embed_fn=embed_fn)
     rel_by_id = {h.cap.name: h.score for h in hits}
 
     scored: list[Scored] = []

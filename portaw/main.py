@@ -343,7 +343,10 @@ def memory():
 @click.argument("prompt", nargs=-1, required=True)
 @click.option("--symbol", "symbols", multiple=True, help="Edit-target symbol(s) being touched.")
 @click.option("--path", "paths", multiple=True, help="Edit-target path(s) being touched.")
-def memory_recall(prompt: tuple[str, ...], symbols: tuple[str, ...], paths: tuple[str, ...]):
+@click.option("--embed", "use_embed", is_flag=True,
+              help="Enable tier-2 semantic fallback (cross-lingual/paraphrase; needs [embed] extra).")
+def memory_recall(prompt: tuple[str, ...], symbols: tuple[str, ...],
+                  paths: tuple[str, ...], use_embed: bool):
     """Dry-run retrieval: what memory would inject for a prompt (+ optional edit-target)."""
     from portaw.memory.anchors import AnchorQuery
     from portaw.memory.inject import format_memory, select
@@ -354,8 +357,14 @@ def memory_recall(prompt: tuple[str, ...], symbols: tuple[str, ...], paths: tupl
     if not entries:
         click.echo("(no memory yet — add some with `portaw memory add`)")
         return
+    embed_fn = None
+    if use_embed:
+        from portaw.kernel.embed import make_embedder
+        embed_fn = make_embedder()
+        if embed_fn is None:
+            click.echo("(--embed requested but model/libs unavailable — TF-IDF only)", err=True)
     q = AnchorQuery(symbols=tuple(symbols), paths=tuple(paths))
-    scored = recall(" ".join(prompt), entries, query=q)
+    scored = recall(" ".join(prompt), entries, query=q, embed_fn=embed_fn)
     selected = select(scored)
     block = format_memory(selected)
     if not block:
@@ -573,6 +582,46 @@ def memory_init(confirm: bool, adr_dir: str | None):
             entries = upsert(entries, e, last_seen=today)
     save_project(entries)
     click.echo(f"wrote {len(harvested)} entries to project-memory.")
+
+
+@memory.command("harvest")
+@click.option("--file", "src", default=None,
+              help="mistakes-index.md (default: ~/.claude/rules/mistakes-index.md).")
+@click.option("--project", "project_id", default="curated",
+              help="Project id for project-scoped mistakes (no stack/env hint).")
+@click.option("--confirm", is_flag=True, help="Write harvested lessons to the global store.")
+def memory_harvest(src: str | None, project_id: str, confirm: bool):
+    """Harvest a curated mistakes-index.md into global lessons (idempotent re-key by id)."""
+    from dataclasses import replace
+
+    from portaw.memory.harvest import default_mistakes_file, harvest_mistakes_file
+    from portaw.memory.store import load_lessons, save_lessons
+
+    path = src or default_mistakes_file()
+    harvested = harvest_mistakes_file(path, project_id=project_id)
+    if not harvested:
+        click.echo(f"no mistakes parsed from {path} — nothing to harvest")
+        return
+    click.echo(f"parsed {len(harvested)} lesson(s) from {path}:")
+    for e in harvested:
+        click.echo(f"  • [{e.applicability:<16}] ×{e.recurrence:<3} c={e.confidence:.2f} {e.body[:60]}")
+    if not confirm:
+        click.echo("\n(preview — re-run with --confirm to write global lessons)")
+        return
+    # Index is authoritative → re-key by id so a re-harvest is idempotent (no recurrence
+    # inflation). Keep the larger recurrence so a live-bumped twin is never demoted.
+    by_id = {e.id: e for e in load_lessons()}
+    added = updated = 0
+    for e in harvested:
+        prev = by_id.get(e.id)
+        if prev is None:
+            by_id[e.id] = e
+            added += 1
+        else:
+            by_id[e.id] = replace(e, recurrence=max(e.recurrence, prev.recurrence))
+            updated += 1
+    save_lessons(list(by_id.values()))
+    click.echo(f"\nwrote {added} new + {updated} updated lesson(s) to the global store.")
 
 
 if __name__ == "__main__":

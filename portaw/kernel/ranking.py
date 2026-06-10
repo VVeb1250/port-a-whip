@@ -16,6 +16,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass, replace
+from typing import Callable
 
 _TOKEN_RE = re.compile(r"[a-z0-9]{3,}")
 
@@ -150,14 +151,26 @@ def route(
     caps: list[Capability],
     cfg: RouteConfig | None = None,
     intent_map: dict[str, list[str]] | None = None,
+    embed_fn: Callable[[str, list[Capability]], dict[str, float]] | None = None,
 ) -> list[Hit]:
-    """Hybrid route: TF-IDF + intent boost + conflict prune + prerequisite fan-out.
+    """Hybrid route: TF-IDF + intent boost + (tier-2 semantic fallback) + conflict
+    prune + prerequisite fan-out.
 
-    Empty intent_map → identical to pure TF-IDF tier-1. Returns ranked Hits
-    (≤ max_results), or [] when nothing clears the confidence floor."""
+    Empty intent_map + no embed_fn → identical to pure TF-IDF tier-1 (the default
+    everywhere; parity-pinned). `embed_fn` is the OPTIONAL tier-2: it fires ONLY
+    when tier-1 found nothing (lazy — the heavy model never runs on a lexical hit),
+    catching paraphrase / cross-lingual prompts. Returns ranked Hits (≤ max_results),
+    or [] when nothing clears the floor."""
     cfg = cfg or RouteConfig()
     scored = _tfidf(prompt, caps, cfg)
     _apply_intent(prompt, scored, caps, intent_map or {}, cfg)
+    if not scored and embed_fn is not None:
+        by_name = {c.name: c for c in caps}
+        scored = {
+            nm: Hit(sc, by_name[nm])
+            for nm, sc in embed_fn(prompt, caps).items()
+            if nm in by_name
+        }
     if not scored:
         return []
     ranked = sorted(scored.values(), key=lambda h: -h.score)
