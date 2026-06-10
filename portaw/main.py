@@ -469,6 +469,43 @@ def memory_pin(entry_id: str, unpin: bool):
     click.echo(f"{'unpinned' if unpin else 'pinned ★'} {hit.id}: {hit.body[:60]}")
 
 
+@memory.command("export")
+@click.option("--out", "out_path", default=None, help="Write to a file (default: stdout).")
+def memory_export(out_path: str | None):
+    """Render the lesson store as readable markdown — the human review surface.
+
+    GENERATED VIEW, not a source: editing it changes nothing (the jsonl store is
+    the single source; curate with memory add/pin/rm)."""
+    from collections import defaultdict
+    from pathlib import Path
+
+    from portaw.memory.store import load_lessons
+
+    entries = load_lessons()
+    if not entries:
+        click.echo("(empty)")
+        return
+    groups: dict[str, list] = defaultdict(list)
+    for e in entries:
+        groups[e.applicability].append(e)
+    lines = ["# paw lessons (GENERATED — edits here change nothing; "
+             "source = ~/.paw/memory/lessons.jsonl)", ""]
+    for tag in sorted(groups):
+        lines.append(f"## {tag}")
+        for e in sorted(groups[tag], key=lambda x: -x.recurrence):
+            pin = "★ " if e.pinned else ""
+            detail = f" → {e.detail_ref}" if e.detail_ref else ""
+            lines.append(f"- {pin}`{e.id[:8]}` {e.body} "
+                         f"(×{e.recurrence}, {e.last_seen or '?'}, c={e.confidence:.2f}){detail}")
+        lines.append("")
+    text = "\n".join(lines)
+    if out_path:
+        Path(out_path).write_text(text, encoding="utf-8")
+        click.echo(f"wrote {len(entries)} lesson(s) to {out_path}")
+    else:
+        click.echo(text)
+
+
 @memory.command("rm")
 @click.argument("entry_ids", nargs=-1, required=True)
 def memory_rm(entry_ids: tuple[str, ...]):

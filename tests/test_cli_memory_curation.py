@@ -29,10 +29,32 @@ def _patch_store(monkeypatch, state):
 def test_all_memory_commands_registered():
     from portaw.main import memory
 
-    expected = {"recall", "list", "add", "pin", "rm", "capture", "enable", "disable",
+    expected = {"recall", "list", "add", "pin", "rm", "export", "capture", "enable", "disable",
                 "status", "capture-hook", "session-hook", "tool-hook",
                 "inject-enable", "inject-disable", "consolidate", "init", "harvest"}
     assert expected <= set(memory.commands)
+
+
+def test_export_groups_and_marks(monkeypatch):
+    state = [
+        _lesson("use py not python", pinned=True, recurrence=34),
+        _lesson("django thing", applicability="stack:django"),
+    ]
+    _patch_store(monkeypatch, state)
+    res = CliRunner().invoke(cli, ["memory", "export"])
+    assert res.exit_code == 0
+    out = res.output
+    assert "GENERATED" in out                      # never mistaken for a source
+    assert "## universal" in out and "## stack:django" in out
+    assert "★" in out and "×34" in out
+
+
+def test_export_to_file(monkeypatch, tmp_path):
+    _patch_store(monkeypatch, [_lesson("x y z")])
+    f = tmp_path / "lessons.md"
+    res = CliRunner().invoke(cli, ["memory", "export", "--out", str(f)])
+    assert res.exit_code == 0
+    assert "x y z" in f.read_text(encoding="utf-8")
 
 
 def test_pin_and_unpin_by_id_prefix(monkeypatch):
