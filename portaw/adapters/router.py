@@ -145,36 +145,36 @@ def _write(path: Path, text: str) -> Path | None:
 
 # ----------------------------------------------------------------- JSON wiring
 
-def _is_wired_json(settings: dict, event: str) -> bool:
+def _is_wired_json(settings: dict, event: str, marker: str = _ROUTER_CMD) -> bool:
     blocks = (settings.get("hooks") or {}).get(event) or []
     return any(
-        _ROUTER_CMD in (h.get("command") or "")
+        marker in (h.get("command") or "")
         for block in blocks for h in block.get("hooks", [])
     )
 
 
-def _enable_json(w: Wiring, command: str) -> tuple[bool, Path | None]:
+def _enable_json(w: Wiring, command: str, marker: str = _ROUTER_CMD) -> tuple[bool, Path | None]:
     settings: dict = {}
     if w.path.exists():
         try:
             settings = json.loads(w.path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as e:
             raise ValueError(f"{w.path} is not valid JSON: {e}") from e
-    if _is_wired_json(settings, w.event):
+    if _is_wired_json(settings, w.event, marker):
         return False, None
     hooks = settings.setdefault("hooks", {})
     hooks.setdefault(w.event, []).append({"hooks": [{"type": "command", "command": command}]})
     return True, _write(w.path, json.dumps(settings, indent=2))
 
 
-def _disable_json(w: Wiring) -> bool:
+def _disable_json(w: Wiring, marker: str = _ROUTER_CMD) -> bool:
     settings = json.loads(w.path.read_text(encoding="utf-8"))
     blocks = (settings.get("hooks") or {}).get(w.event)
     if not blocks:
         return False
     kept = [
         b for b in blocks
-        if not any(_ROUTER_CMD in (h.get("command") or "") for h in b.get("hooks", []))
+        if not any(marker in (h.get("command") or "") for h in b.get("hooks", []))
     ]
     if len(kept) == len(blocks):
         return False
@@ -185,21 +185,21 @@ def _disable_json(w: Wiring) -> bool:
 
 # ----------------------------------------------------------------- TOML wiring (Codex)
 
-def _is_wired_toml(text: str, event: str) -> bool:
+def _is_wired_toml(text: str, event: str, marker: str = _ROUTER_CMD) -> bool:
     if not text.strip():
         return False
     arr = (tomlkit.parse(text).get("hooks") or {}).get(event)
     if not arr:
         return False
     return any(
-        _ROUTER_CMD in (h.get("command") or "")
+        marker in (h.get("command") or "")
         for block in arr for h in (block.get("hooks") or [])
     )
 
 
-def _enable_toml(w: Wiring, command: str) -> tuple[bool, Path | None]:
+def _enable_toml(w: Wiring, command: str, marker: str = _ROUTER_CMD) -> tuple[bool, Path | None]:
     text = w.path.read_text(encoding="utf-8") if w.path.exists() else ""
-    if _is_wired_toml(text, w.event):
+    if _is_wired_toml(text, w.event, marker):
         return False, None
     doc = tomlkit.parse(text) if text.strip() else tomlkit.document()
     hooks = doc.get("hooks")
@@ -227,7 +227,7 @@ def _enable_toml(w: Wiring, command: str) -> tuple[bool, Path | None]:
     return True, _write(w.path, out_text)
 
 
-def _disable_toml(w: Wiring) -> bool:
+def _disable_toml(w: Wiring, marker: str = _ROUTER_CMD) -> bool:
     if not w.path.exists():
         return False
     text = w.path.read_text(encoding="utf-8")
@@ -240,7 +240,7 @@ def _disable_toml(w: Wiring) -> bool:
         return False
     kept = [
         b for b in arr
-        if not any(_ROUTER_CMD in (h.get("command") or "") for h in (b.get("hooks") or []))
+        if not any(marker in (h.get("command") or "") for h in (b.get("hooks") or []))
     ]
     if len(kept) == len(arr):
         return False
@@ -285,4 +285,41 @@ def status(host: HostId) -> dict:
         except (json.JSONDecodeError, tomlkit.exceptions.ParseError):
             wired = False
     return {"host": host, "settings": str(w.path), "event": w.event,
+            "wired": wired, "exists": w.path.exists()}
+
+
+# ------------------------------------------------ generic hook wiring (reused by L3)
+
+def _wiring_for(host: HostId, event: str) -> Wiring:
+    """Same host config file/format as the router, but a different event (e.g. Stop)."""
+    w = _wiring(host)
+    return Wiring(path=w.path, fmt=w.fmt, event=event)
+
+
+def enable_hook(host: HostId, *, command: str, event: str, marker: str) -> tuple[bool, Path | None]:
+    """Wire any command into a host's hook config under `event` (backup + idempotent)."""
+    w = _wiring_for(host, event)
+    return (_enable_json(w, command, marker) if w.fmt == "json"
+            else _enable_toml(w, command, marker))
+
+
+def disable_hook(host: HostId, *, event: str, marker: str) -> bool:
+    """Remove a previously wired command (matched by marker) from `event`."""
+    w = _wiring_for(host, event)
+    if not w.path.exists():
+        return False
+    return _disable_json(w, marker) if w.fmt == "json" else _disable_toml(w, marker)
+
+
+def status_hook(host: HostId, *, event: str, marker: str) -> dict:
+    w = _wiring_for(host, event)
+    wired = False
+    if w.path.exists():
+        try:
+            text = w.path.read_text(encoding="utf-8")
+            wired = (_is_wired_json(json.loads(text or "{}"), event, marker) if w.fmt == "json"
+                     else _is_wired_toml(text, event, marker))
+        except (json.JSONDecodeError, tomlkit.exceptions.ParseError):
+            wired = False
+    return {"host": host, "settings": str(w.path), "event": event,
             "wired": wired, "exists": w.path.exists()}

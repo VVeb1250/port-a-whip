@@ -5,6 +5,8 @@ real impl wires to sets/ (loader, patcher, shim), kernel/ (ranking, registry),
 adapters/ (per-host inject). See CLAUDE.md target tree.
 """
 
+import sys
+
 import click
 
 from portaw import __version__
@@ -448,6 +450,56 @@ def memory_capture(trigger, fix, symbols, paths, stack, env_level, confidence, p
     else:
         click.echo(f"NOT stored — {res.verdict.reason}")
         raise SystemExit(1)
+
+
+@memory.command("enable")
+@click.option("--host", default=None, help="claude-code (default) / codex / gemini.")
+def memory_enable(host: str | None):
+    """Wire the capture hook into the host's Stop event (backup + idempotent)."""
+    from portaw.memory.hookwire import capture_command, enable_capture
+    from portaw.sets.install import resolve_host
+
+    try:
+        hid = resolve_host(host) if host is None else host  # type: ignore[arg-type]
+        changed, backup = enable_capture(hid)  # type: ignore[arg-type]
+    except ValueError as e:
+        raise click.ClickException(str(e))
+    if not changed:
+        click.echo(f"capture hook already wired on {hid}")
+    else:
+        b = f" (backup {backup.name})" if backup else " (new config)"
+        click.echo(f"capture hook enabled on {hid}: '{capture_command(hid)}'{b}")
+        click.echo("takes effect next session.")
+
+
+@memory.command("disable")
+@click.option("--host", default=None)
+def memory_disable(host: str | None):
+    """Remove the capture hook from the host's Stop event."""
+    from portaw.memory.hookwire import disable_capture
+    from portaw.sets.install import resolve_host
+
+    try:
+        hid = resolve_host(host) if host is None else host  # type: ignore[arg-type]
+        removed = disable_capture(hid)  # type: ignore[arg-type]
+    except ValueError as e:
+        raise click.ClickException(str(e))
+    click.echo(f"capture hook {'disabled' if removed else 'was not wired'} on {hid}")
+
+
+@memory.command("status")
+@click.option("--host", default=None)
+def memory_status(host: str | None):
+    """Show capture-hook wiring state."""
+    from portaw.memory.hookwire import capture_status
+    from portaw.sets.install import resolve_host
+
+    try:
+        hid = resolve_host(host) if host is None else host  # type: ignore[arg-type]
+        st = capture_status(hid)  # type: ignore[arg-type]
+    except ValueError as e:
+        raise click.ClickException(str(e))
+    click.echo(f"host={st['host']} event={st['event']} wired={st['wired']} settings={st['settings']}")
 
 
 @memory.command("capture-hook")
