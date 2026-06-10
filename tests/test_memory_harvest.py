@@ -128,5 +128,21 @@ def test_non_bullet_line_returns_none():
     assert parse_line("- not a tagged bullet", "X", "p", "2026-01-01") is None
 
 
-def test_default_path_under_claude_rules(tmp_path):
-    assert default_mistakes_file(tmp_path).as_posix().endswith(".claude/rules/mistakes-index.md")
+def test_default_path_prefers_migrated_location(tmp_path):
+    # fresh root (neither exists) → the post-migration location
+    assert default_mistakes_file(tmp_path).as_posix().endswith(".claude/mistakes/mistakes-index.md")
+
+
+def test_default_path_falls_back_to_legacy_rules(tmp_path):
+    legacy = tmp_path / ".claude" / "rules" / "mistakes-index.md"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("- [HIGH] [x] a → b\n", encoding="utf-8")
+    assert default_mistakes_file(tmp_path) == legacy
+
+
+def test_default_path_migrated_wins_over_legacy(tmp_path):
+    for d in ("rules", "mistakes"):
+        f = tmp_path / ".claude" / d / "mistakes-index.md"
+        f.parent.mkdir(parents=True)
+        f.write_text("- [HIGH] [x] a → b\n", encoding="utf-8")
+    assert default_mistakes_file(tmp_path).parent.name == "mistakes"
