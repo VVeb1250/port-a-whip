@@ -31,6 +31,8 @@ _ERR_PATTERNS: list[tuple[str, str]] = [
 ]
 _FILEISH = re.compile(r"[./\\]")
 _WORD = re.compile(r"[A-Za-z0-9_.\-/\\]{3,}")
+_INLINE = re.compile(r"(?:^|\s)-[ce](?:\s|$)")  # `py -c "..."` / `node -e` = inline blob
+_MAX_CMD = 150  # longer = a one-off blob, not a reusable corrective command
 _SHELL_NOISE = {
     "the", "and", "run", "cd", "ls", "cat", "echo", "git", "sudo", "&&", "||",
     "rm", "cp", "mv", "for", "out", "txt", "log", "tmp", "set", "get",
@@ -126,13 +128,21 @@ def _anchors(command: str) -> tuple[list[str], list[str]]:
     return paths, symbols
 
 
+def _reusable(command: str) -> bool:
+    """A short, non-inline command — the kind a corrective lesson is about."""
+    return bool(command) and len(command) <= _MAX_CMD and not _INLINE.search(command)
+
+
 def detect_signals(calls: list[ToolCall], *, max_gap: int = 4,
-                   confidence: float = 0.45) -> list[FailureSignal]:
-    """Pair each errored Bash call with a later succeeding, token-overlapping one."""
+                   confidence: float = 0.45, min_overlap: float = 0.34) -> list[FailureSignal]:
+    """Pair an errored Bash call with a later succeeding NEAR-VARIANT (high token
+    overlap). Inline `-c/-e` blobs and long one-offs are skipped, and the fix must
+    share a Jaccard ≥ min_overlap of significant tokens — so `python x → py x` fires
+    but two unrelated long probes that merely share a generic token do not."""
     signals: list[FailureSignal] = []
     used: set[int] = set()
     for i, c in enumerate(calls):
-        if not c.is_error or not c.command:
+        if not c.is_error or not _reusable(c.command):
             continue
         fail_tokens = _sig_tokens(c.command)
         if not fail_tokens:
@@ -141,20 +151,23 @@ def detect_signals(calls: list[ToolCall], *, max_gap: int = 4,
             if j in used:
                 continue
             nxt = calls[j]
-            if nxt.is_error or not nxt.command:
+            if nxt.is_error or not _reusable(nxt.command):
                 continue
-            if fail_tokens & _sig_tokens(nxt.command):
-                tag = _err_tag(c.result) or "failed"
-                paths, symbols = _anchors(nxt.command)
-                signals.append(FailureSignal(
-                    trigger=f"{c.command} ({tag})",
-                    fix=nxt.command,
-                    paths=tuple(paths[:3]),
-                    symbols=tuple(symbols[:3]),
-                    confidence=confidence,
-                ))
-                used.add(j)
-                break
+            fix_tokens = _sig_tokens(nxt.command)
+            union = fail_tokens | fix_tokens
+            if not union or len(fail_tokens & fix_tokens) / len(union) < min_overlap:
+                continue
+            tag = _err_tag(c.result) or "failed"
+            paths, symbols = _anchors(nxt.command)
+            signals.append(FailureSignal(
+                trigger=f"{c.command} ({tag})",
+                fix=nxt.command,
+                paths=tuple(paths[:3]),
+                symbols=tuple(symbols[:3]),
+                confidence=confidence,
+            ))
+            used.add(j)
+            break
     return signals
 
 
