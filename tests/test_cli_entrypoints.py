@@ -25,7 +25,7 @@ def test_router_run_injects_memory(monkeypatch):
     from portaw.memory.schema import MemoryEntry
 
     e = MemoryEntry.new("lesson", "forgot await on async call", "global",
-                        trigger_terms=("async", "await"))
+                        trigger_terms=("async", "await"), confidence=0.9)
     monkeypatch.setattr(store, "load_lessons", lambda: [e])
     monkeypatch.setattr(store, "load_project", lambda: [])
     runner = CliRunner()

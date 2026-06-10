@@ -13,7 +13,7 @@ def _payload(prompt: str) -> str:
 
 def test_memory_block_injects_when_store_has_match(monkeypatch):
     e = MemoryEntry.new("lesson", "forgot await on async call", "global",
-                        trigger_terms=("async", "await"))
+                        trigger_terms=("async", "await"), confidence=0.9)
     monkeypatch.setattr(store, "load_lessons", lambda: [e])
     monkeypatch.setattr(store, "load_project", lambda: [])
     out = router.run_hook(_payload("my async function returns a coroutine"))

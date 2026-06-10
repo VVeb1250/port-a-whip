@@ -221,13 +221,20 @@ artifacts if present but runs no watcher of its own.
 ## 7. Safety — integrity gate (R3 / SSGM)
 
 Evolving + cross-host memory is an attack surface: poisoning (an agent writes a wrong,
-high-confidence lesson that propagates), drift, staleness. Gate on write:
-- confidence threshold before an entry enters the hot tier,
-- **human-confirm for project-memory writes** (also covers the ADR/CLAUDE.md harvest),
-- provenance attached to every entry,
-- write/confirm bar scales with scope (§2.2): `project` < `stack` < `universal`.
+high-confidence lesson that propagates), drift, staleness.
 
-Pairs naturally with paw's `secure-agent` Permissions axis.
+**Storage is permissive; injection is strict** (resolved during build — a write-time
+universal bar deadlocks: a rejected lesson never recurs, so it never accumulates the
+recurrence that would prove it). So:
+- **write** (`gate.accepts`): lessons always storable (recurrence can accumulate);
+  **human-confirm for project-memory writes** only (human-authored, not auto-detected).
+- **inject** (`gate.trusted`): an *untrusted* universal lesson (largest blast radius,
+  low confidence AND recurrence < 2) is stored but **never injected** until proven.
+  Narrower scopes (`stack:`/`project:`) and pinned entries are trusted by construction.
+- consolidation archives anything that never recurs, so permissive storage stays bounded.
+
+This matches the governing principle: a false-INJECT (context rot) costs more than a
+false-store. Pairs naturally with paw's `secure-agent` Permissions axis.
 
 ---
 
@@ -306,13 +313,17 @@ version of the pattern these services validated.
 
 ---
 
-## 13. Open questions (resolve before/at /plan)
+## 13. Open questions
 
-- [ ] Stop-hook capture: how to reliably detect "failure→fix" from a session transcript
-      cross-host (the CC mistake hook's heuristics may not port cleanly to Codex/Gemini).
-- [ ] `applicability` inference: rules for auto-tagging new lessons universal/stack/project.
-- [ ] hot-tier eviction: fixed activation threshold vs budget-adaptive.
-- [ ] codegraph node-id reconciliation after re-index (anchor repair).
+- [x] Stop-hook capture detect (`detect.py`) — Bash failure→fix, conservative,
+      low-confidence; structured `paw_lesson` is the reliable floor. Generic NL = future.
+- [x] `applicability` inference — env-keyword → universal, framework → stack, else project
+      (`capture.classify_text` / `infer_applicability`); promotion via recurrence.
+- [x] hot-tier eviction — budget-adaptive (activation cap), not a fixed threshold.
+- [x] node-id reconcile — path+symbol always stored (stable); codegraph node optional,
+      lazy-fallback at retrieval (no repair daemon).
+- [ ] cross-host detector parity — `detect.py` is CC-transcript-shaped; confirm/port the
+      transcript format for Codex/Gemini (the structured `paw_lesson` path is host-neutral).
 
 ## 14. Build order (for /plan)
 

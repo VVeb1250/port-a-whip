@@ -15,8 +15,10 @@ from portaw.memory.schema import MemoryEntry
 TODAY = date(2026, 6, 10)
 
 
-def _scored(body, base, *, etype="lesson", pinned=False, recurrence=1):
-    e = MemoryEntry.new(etype, body, "global", pinned=pinned, recurrence=recurrence)
+def _scored(body, base, *, etype="lesson", pinned=False, recurrence=1, confidence=0.85,
+            applicability="universal"):
+    e = MemoryEntry.new(etype, body, "global", pinned=pinned, recurrence=recurrence,
+                        confidence=confidence, applicability=applicability)
     return Scored(score=base, entry=e, relevance=base, anchor=0.0, activation=1.0, base=base)
 
 
@@ -73,10 +75,20 @@ def test_format_shows_body_recurrence_and_pin():
 def test_memory_context_end_to_end():
     entries = [
         MemoryEntry.new("lesson", "forgot await on async", "global",
-                        trigger_terms=("async", "await"), last_seen=TODAY.isoformat()),
+                        trigger_terms=("async", "await"), confidence=0.9,
+                        last_seen=TODAY.isoformat()),
     ]
     txt = memory_context("my async returns a coroutine", entries, today=TODAY)
     assert "forgot await" in txt
+
+
+def test_untrusted_universal_lesson_not_injected():
+    # universal + low confidence + recurrence 1 → stored but must stay silent (§2.2)
+    untrusted = _scored("unproven universal claim", 0.9, confidence=0.4, recurrence=1)
+    assert select([untrusted]) == []
+    # …becomes injectable once it has recurred (proven)
+    proven = _scored("proven by recurrence", 0.9, confidence=0.4, recurrence=2)
+    assert len(select([proven])) == 1
 
 
 def test_memory_context_silent_on_unrelated():

@@ -64,6 +64,38 @@ load-all cost, 0 on CC). A set can save at runtime AND cost idle — record both
 
 ---
 
+## Part 2.5 — UPDATE 2026-06-10 (L3 BUILT)
+
+**Phase 3 lesson+project memory is built** (`portaw/memory/`, 150 tests). Design =
+[docs/L3-DESIGN.md](docs/L3-DESIGN.md) (R1-R12 + anchor weighting + scope + 14-step
+build order — READ IT before touching L3). What landed:
+- **schema/store** — jsonl, global `~/.paw/memory` + project `.paw/memory`; content-hash
+  id = free cross-project dedup; atomic write; malformed-tolerant; archive file.
+- **retrieval** — HYBRID reusing the ONE kernel (`kernel.route`, semantic) + anchor
+  overlap (path/symbol = zero-setup structural floor; codegraph node = present-only
+  bonus) + ACT-R activation (recency×frequency). Silence-default.
+- **injection** — silence-biased, per-type threshold (lesson low / project high),
+  budget cap, pinned-first; wired into `adapters/router.py` (memory injects alongside
+  set hits, fail-safe).
+- **capture/gate** — `FailureSignal` → applicability auto-tag (universal/stack/project)
+  → integrity gate (scope-scaled bar §7) → upsert. Cross-host `paw_lesson` contract.
+- **consolidate/seed** — async "dream" (merge/promote/decay-archive); ADR-harvest v1.
+- **hook wiring** — `memory enable/disable/status` wires `capture-hook` into the Stop
+  event (reuses router's generic wiring; coexists with the UserPromptSubmit router).
+- **dogfood (isolated HOME) PROVED the loop**: enable → Stop(capture) → UserPromptSubmit
+  (router run) injects the just-captured lesson. **Fixed a real latent bug**: `main.py`
+  lacked `import sys` → the live router CLI emitted nothing (NameError swallowed by its
+  safe-except); now guarded by CLI-level CliRunner tests.
+
+**Key design decisions made this session (don't relitigate):**
+- lesson = GLOBAL store + applicability tag (universal/stack/project) + auto-promote on
+  cross-project recurrence; project = project-scoped; preference DEFERRED (AGENTS.md/rulesync).
+- anchor backbone weighted → **path+symbol = primary** (zero-setup, every host); codegraph =
+  present-only multi-hop bonus; **graphify DROPPED** (LLM init token too high); embedding =
+  lazy/optional (reuse skill-router model).
+- "better than RAG" = structured+tiered+consolidated+graph-anchored recall, NOT a vector engine.
+- RAG-Anything REJECTED (cloud-API + framework swallows the layer + doc≠code domain).
+
 ## Part 2 — Current state (2026-06-08)
 
 - **6 sets** in `registry/sets.json` (schema 0.3.1): efficiency-starter, secure-agent, context-quality, design-quality (DRAFT), web-research (DRAFT, CC measured), **browser-automation (NEW, DRAFT)**.
@@ -79,6 +111,24 @@ load-all cost, 0 on CC). A set can save at runtime AND cost idle — record both
 - codegraph index BUILT for this repo. semble installed. tiktoken installed (measurement only, NOT a paw runtime dep — runtime deps stay click>=8.1, tomlkit>=0.13).
 
 ---
+
+## Part 3.0 — NEXT (2026-06-10, supersedes the 2026-06-08 list below)
+
+1. **NL failure→fix detector** (`portaw/memory/detect.py`) — IN PROGRESS. The Stop hook
+   currently only acts on a structured `paw_lesson` payload, which nothing emits yet, so
+   capture is empty. Detector reads the CC transcript (Stop payload `transcript_path`),
+   finds a Bash failure → later success of a similar command, emits a `FailureSignal`.
+   Conservative + low-confidence (gate + recurrence decide). This is the §13 HIGH-risk
+   noisy part — keep it Bash-focused and high-signal first; generic NL later.
+2. **wire into real `~/.claude`** — `portaw memory enable` (Stop hook = safe no-op until
+   the detector emits). memory *inject* needs paw router enabled, which double-fires with
+   the standalone skill-router hook → that's the **kernel-unify** track (merge paw kernel
+   with the live skill-router hook so ONE ranker runs).
+3. **Codex/Gemini Stop live** — `_STOP_EVENT` is best-guess; confirm per host. Cross-host
+   capture = the portability moat proof.
+4. **embedding tier-2** — lazy/optional, reuse the skill-router multilingual model.
+5. **DOGFOOD-PENDING new item** — bench symbol+path-anchor precision vs codegraph multi-hop
+   (is the multi-hop bonus worth its setup? expect ~80/20 in favor of the zero-setup floor).
 
 ## Part 3 — Tasks for next session (prioritized)
 

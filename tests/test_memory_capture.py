@@ -8,7 +8,7 @@ from portaw.memory.capture import (
     infer_applicability,
     to_lesson,
 )
-from portaw.memory.gate import GateConfig, accepts, enters_hot
+from portaw.memory.gate import GateConfig, accepts, enters_hot, trusted
 from portaw.memory.schema import MemoryEntry
 
 TODAY = "2026-06-10"
@@ -22,22 +22,32 @@ def test_project_write_needs_confirm():
     assert accepts(e, confirmed=True).ok
 
 
-def test_universal_lesson_needs_high_confidence_or_recurrence():
+def test_lessons_always_storable_so_recurrence_can_accumulate():
+    # storage is permissive — a rejected lesson would never recur (deadlock).
     weak = MemoryEntry.new("lesson", "x", "global", applicability="universal",
                            confidence=0.5, recurrence=1)
-    assert not accepts(weak).ok
+    assert accepts(weak).ok
+
+
+def test_universal_lesson_trusted_only_when_proven():
+    # the blast-radius bar lives at injection, not storage.
+    weak = MemoryEntry.new("lesson", "x", "global", applicability="universal",
+                           confidence=0.5, recurrence=1)
+    assert not trusted(weak)
     strong_conf = MemoryEntry.new("lesson", "y", "global", applicability="universal",
                                   confidence=0.8, recurrence=1)
-    assert accepts(strong_conf).ok
+    assert trusted(strong_conf)
     recurred = MemoryEntry.new("lesson", "z", "global", applicability="universal",
                                confidence=0.5, recurrence=2)
-    assert accepts(recurred).ok
+    assert trusted(recurred)
 
 
-def test_stack_lesson_accepted_without_universal_bar():
-    e = MemoryEntry.new("lesson", "x", "global", applicability="stack:django",
-                        confidence=0.5)
-    assert accepts(e).ok
+def test_narrow_scope_and_pinned_always_trusted():
+    stack = MemoryEntry.new("lesson", "x", "global", applicability="stack:django",
+                            confidence=0.4)
+    pinned = MemoryEntry.new("lesson", "y", "global", applicability="universal",
+                             confidence=0.1, pinned=True)
+    assert trusted(stack) and trusted(pinned)
 
 
 def test_enters_hot_threshold():
@@ -99,10 +109,12 @@ def test_capture_stores_accepted_lesson(monkeypatch):
     assert saved["e"][0].body == "used python → use py"
 
 
-def test_capture_rejects_weak_universal_without_storing(monkeypatch):
+def test_capture_stores_weak_universal_so_it_can_recur(monkeypatch):
+    saved = {}
     monkeypatch.setattr(store, "load_lessons", lambda: [])
-    monkeypatch.setattr(store, "save_lessons",
-                        lambda entries: (_ for _ in ()).throw(AssertionError("must not save")))
+    monkeypatch.setattr(store, "save_lessons", lambda entries: saved.update(e=entries))
     sig = FailureSignal(trigger="used python", fix="use py", env_level=True, confidence=0.4)
     res = capture(sig, "paw", today=TODAY)
-    assert not res.stored and not res.verdict.ok
+    # stored (so recurrence can accumulate) but not yet trusted for injection
+    assert res.stored and res.verdict.ok
+    assert saved["e"][0].applicability == "universal"

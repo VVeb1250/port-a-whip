@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from portaw.memory.anchors import AnchorQuery
+from portaw.memory.gate import trusted
 from portaw.memory.retrieval import (
     RetrievalConfig,
     RetrievalContext,
@@ -44,9 +45,11 @@ def _passes(s: Scored, cfg: InjectConfig) -> bool:
 def select(scored: list[Scored], cfg: InjectConfig | None = None) -> list[Scored]:
     """Pinned-first, then per-type-gated, capped by item count AND token budget."""
     cfg = cfg or InjectConfig()
+    # untrusted universal lessons (unproven, large blast radius) never inject — they
+    # are stored so recurrence can accumulate, but stay silent until proven (§2.2).
     ordered = (
         [s for s in scored if s.entry.pinned]
-        + [s for s in scored if not s.entry.pinned and _passes(s, cfg)]
+        + [s for s in scored if not s.entry.pinned and _passes(s, cfg) and trusted(s.entry)]
     )
     out: list[Scored] = []
     seen: set[str] = set()

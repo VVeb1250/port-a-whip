@@ -133,11 +133,12 @@ def capture(
 
 def run_capture_hook(
     stdin_text: str | None = None, project_id: str | None = None
-) -> CaptureResult | None:
-    """Stop-hook entrypoint (all hosts). Safe-by-construction: ANY error → None.
+) -> list[CaptureResult]:
+    """Stop-hook entrypoint (all hosts). Safe-by-construction: ANY error → [].
 
-    Same contract across CC/Codex/Gemini — the payload carries ``paw_lesson``;
-    capture only writes (no context emitted), so the host differs only in cwd."""
+    Two inputs, both host-agnostic: an explicit ``paw_lesson`` field (structured,
+    reliable floor) OR a CC ``transcript_path`` (the detector mines failure→fix
+    pairs from it). Capture only writes, so the host differs only in cwd."""
     import json
     import sys
     from pathlib import Path
@@ -150,10 +151,16 @@ def run_capture_hook(
                 if not sys.stdin.isatty() else ""
             )
         payload = json.loads(raw) if raw.strip() else {}
-        signal = from_payload(payload)
-        if signal is None:
-            return None
         pid = project_id or payload.get("cwd_name") or Path.cwd().name
-        return capture(signal, pid)
+
+        explicit = from_payload(payload)
+        if explicit is not None:
+            return [capture(explicit, pid)]
+
+        transcript = payload.get("transcript_path")
+        if transcript:
+            from portaw.memory.detect import from_transcript
+            return [capture(sig, pid) for sig in from_transcript(transcript)]
+        return []
     except Exception:
-        return None
+        return []

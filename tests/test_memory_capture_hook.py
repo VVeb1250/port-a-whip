@@ -26,14 +26,14 @@ def test_run_capture_hook_stores(monkeypatch):
     monkeypatch.setattr(store, "load_lessons", lambda: [])
     monkeypatch.setattr(store, "save_lessons", lambda e: saved.update(e=e))
     res = run_capture_hook(_payload(trigger="used python", fix="use py", env=True, confidence=0.8))
-    assert res and res.stored
+    assert len(res) == 1 and res[0].stored
     assert saved["e"][0].body == "used python → use py"
     assert saved["e"][0].applicability == "universal"
 
 
 def test_run_capture_hook_safe_on_garbage():
-    assert run_capture_hook("not json at all {{{") is None
+    assert run_capture_hook("not json at all {{{") == []
 
 
 def test_run_capture_hook_none_without_paw_lesson():
-    assert run_capture_hook(json.dumps({"prompt": "hi"})) is None
+    assert run_capture_hook(json.dumps({"prompt": "hi"})) == []

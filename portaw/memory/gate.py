@@ -30,27 +30,30 @@ class Verdict:
 
 def accepts(entry: MemoryEntry, *, confirmed: bool = False,
             cfg: GateConfig | None = None) -> Verdict:
-    """May this entry be written? Scope-scaled (§2.2): universal > stack > project."""
+    """May this entry be WRITTEN? Storage is permissive so recurrence can accumulate
+    (a rejected lesson never recurs → never learns). The universal blast-radius bar
+    lives at injection (`trusted`), not here — false-inject costs more than
+    false-store, and consolidation archives anything that never recurs. Project
+    writes still need explicit confirm (human-authored, not auto-detected)."""
     cfg = cfg or GateConfig()
-
     if entry.type == "project":
         if cfg.project_needs_confirm and not confirmed:
             return Verdict(False, "project-memory write needs explicit confirm")
         return Verdict(True, "project write confirmed")
-
-    # lessons: applicability-scaled bar
-    if entry.applicability == "universal":
-        strong = (
-            entry.confidence >= cfg.universal_min_confidence
-            or entry.recurrence >= cfg.universal_min_recurrence
-        )
-        if not strong:
-            return Verdict(
-                False,
-                f"universal lesson needs confidence ≥ {cfg.universal_min_confidence} "
-                f"or recurrence ≥ {cfg.universal_min_recurrence} (blast radius)",
-            )
     return Verdict(True, "lesson accepted")
+
+
+def trusted(entry: MemoryEntry, cfg: GateConfig | None = None) -> bool:
+    """May this entry be INJECTED as-is? A universal lesson (largest blast radius)
+    must be proven — high confidence OR recurrence (§2.2). Narrower scopes and
+    pinned entries are trusted by construction. This is where poisoning is stopped."""
+    cfg = cfg or GateConfig()
+    if entry.pinned or entry.applicability != "universal":
+        return True
+    return (
+        entry.confidence >= cfg.universal_min_confidence
+        or entry.recurrence >= cfg.universal_min_recurrence
+    )
 
 
 def enters_hot(entry: MemoryEntry, cfg: GateConfig | None = None) -> bool:

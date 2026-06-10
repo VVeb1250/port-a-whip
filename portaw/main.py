@@ -509,9 +509,11 @@ def memory_capture_hook(host: str):
     try:
         from portaw.memory.capture import run_capture_hook
 
-        res = run_capture_hook()
-        if res and res.stored:
-            click.echo(f"paw memory: captured {res.entry.id}", err=True)
+        results = run_capture_hook()
+        stored = [r for r in results if r.stored]
+        if stored:
+            ids = ", ".join(r.entry.id for r in stored)
+            click.echo(f"paw memory: captured {len(stored)} ({ids})", err=True)
     except Exception:
         pass
     raise SystemExit(0)
