@@ -394,7 +394,10 @@ def memory_list(etype: str | None):
 @click.option("--symbol", "symbols", multiple=True, help="Anchor symbol(s).")
 @click.option("--path", "paths", multiple=True, help="Anchor path(s).")
 @click.option("--pin", is_flag=True, help="Always-on tier (highest-ROI universal only).")
-def memory_add(body, etype, scope, applicability, triggers, symbols, paths, pin):
+@click.option("--confidence", default=0.9, type=float,
+              help="Manual adds default to 0.9 (a deliberate human assertion = trusted "
+                   "for injection even at universal scope). Lower it for a tentative note.")
+def memory_add(body, etype, scope, applicability, triggers, symbols, paths, pin, confidence):
     """Add a memory entry (compressed one-liner body)."""
     from datetime import date
 
@@ -414,6 +417,7 @@ def memory_add(body, etype, scope, applicability, triggers, symbols, paths, pin)
         applicability=applicability if etype == "lesson" else f"project:{scope}",
         trigger_terms=tuple(triggers),
         anchors=Anchors(symbols=tuple(symbols), paths=tuple(paths)),
+        pinned=pin, confidence=confidence,
         source="user", last_seen=date.today().isoformat(),
     )
     today = date.today().isoformat()

@@ -44,3 +44,24 @@ def test_capture_hook_cli_stores(monkeypatch):
     res = runner.invoke(cli, ["memory", "capture-hook"], input=payload)
     assert res.exit_code == 0
     assert saved and saved["e"][0].body == "used python → use py"
+
+
+def test_memory_add_pin_and_confidence_make_universal_injectable(monkeypatch):
+    # regression: --pin must reach the entry, and a manual universal add must be
+    # trusted (defaults to confidence 0.9) so it actually injects.
+    from portaw.memory.gate import trusted
+
+    saved = {}
+    monkeypatch.setattr(store, "load_lessons", lambda: [])
+    monkeypatch.setattr(store, "save_lessons", lambda e: saved.update(e=e))
+    runner = CliRunner()
+
+    res = runner.invoke(cli, ["memory", "add", "--applicability", "universal",
+                              "use py on windows not python"])
+    assert res.exit_code == 0
+    e = saved["e"][0]
+    assert e.confidence == 0.9 and trusted(e)  # injectable without --pin
+
+    saved.clear()
+    res = runner.invoke(cli, ["memory", "add", "--pin", "always on note"])
+    assert res.exit_code == 0 and saved["e"][0].pinned is True

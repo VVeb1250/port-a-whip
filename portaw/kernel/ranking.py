@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 
 _TOKEN_RE = re.compile(r"[a-z0-9]{3,}")
 

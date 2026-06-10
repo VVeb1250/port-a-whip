@@ -4,7 +4,7 @@ import json
 
 from portaw.memory import store
 from portaw.memory.capture import run_capture_hook
-from portaw.memory.detect import detect_signals, from_transcript, parse_transcript
+from portaw.memory.detect import from_transcript, parse_transcript
 
 
 def _tu(tid, command):

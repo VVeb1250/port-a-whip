@@ -84,7 +84,7 @@ def _count_active_mcp(hc: HostConfig) -> int:
     """How many MCP servers currently in the host config (for ceiling check)."""
     import json
 
-    from portaw.sets.patcher import _read, has_toml  # reuse readers
+    from portaw.sets.patcher import _read  # reuse readers
 
     text = _read(hc.path)
     if not text.strip():

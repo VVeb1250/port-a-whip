@@ -46,7 +46,11 @@ def accepts(entry: MemoryEntry, *, confirmed: bool = False,
 def trusted(entry: MemoryEntry, cfg: GateConfig | None = None) -> bool:
     """May this entry be INJECTED as-is? A universal lesson (largest blast radius)
     must be proven — high confidence OR recurrence (§2.2). Narrower scopes and
-    pinned entries are trusted by construction. This is where poisoning is stopped."""
+    pinned entries are trusted by construction. This is where poisoning is stopped.
+
+    Note: a manual `memory add` clears this naturally because it defaults to high
+    confidence (the human asserting it = a vouch); auto-detected `hook`/`agent`
+    lessons still have to earn it via confidence or recurrence."""
     cfg = cfg or GateConfig()
     if entry.pinned or entry.applicability != "universal":
         return True
