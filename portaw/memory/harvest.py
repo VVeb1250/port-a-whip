@@ -145,6 +145,10 @@ def harvest_mistakes_file(
 
 
 def default_mistakes_file(root: Path | str | None = None) -> Path:
-    """~/.claude/rules/mistakes-index.md — the author's curated gold source."""
+    """The author's curated gold source. Post single-source migration (2026-06-11)
+    it lives OUTSIDE the auto-loaded rules dir; the old location is the fallback
+    so a pre-migration setup keeps working."""
     base = Path(root) if root is not None else Path.home()
-    return base / ".claude" / "rules" / "mistakes-index.md"
+    new = base / ".claude" / "mistakes" / "mistakes-index.md"
+    old = base / ".claude" / "rules" / "mistakes-index.md"
+    return new if new.exists() or not old.exists() else old

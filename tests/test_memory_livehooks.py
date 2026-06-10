@@ -184,6 +184,16 @@ def test_memory_block_stack_lesson_ineligible_without_marker(tmp_path, monkeypat
     assert out == ""
 
 
+def test_memory_block_without_session_id_keeps_pins_quiet(tmp_path, monkeypatch):
+    # stale skill-router copy passes no session_id → no dedup log → a pin must
+    # NOT ride every prompt; evidence-based hits still inject.
+    pin = _lesson("pinned env rule", pinned=True)
+    rel = _lesson("forgot await on async call", trigger_terms=("async", "await"))
+    _wire(monkeypatch, tmp_path, [pin, rel])
+    out = router.memory_block("my async call returns a coroutine", str(tmp_path), "")
+    assert "forgot await" in out and "pinned env rule" not in out
+
+
 # --- embed lazy wrapper ---
 
 def test_lazy_embedder_unavailable_returns_empty(tmp_path):

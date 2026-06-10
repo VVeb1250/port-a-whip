@@ -108,6 +108,14 @@ def memory_block(prompt: str, cwd: str | None = None, session_id: str = "") -> s
             return ""
         scored = recall(prompt, entries, ctx=host_context(cwd),
                         embed_fn=lazy_embedder())
+        if not session_id:
+            # no session id = no dedup log: a floor-bypassing pin would re-inject
+            # on EVERY prompt (rot). Without a log only evidence-based hits ride;
+            # pins reach such hosts once their envelope carries a session_id.
+            from portaw.memory.retrieval import RetrievalConfig
+
+            floor = RetrievalConfig().base_floor
+            scored = [s for s in scored if s.base >= floor]
         already = sessionlog.seen(session_id) if session_id else set()
         if already:
             scored = [s for s in scored if s.entry.id not in already]

@@ -467,6 +467,24 @@ def memory_pin(entry_id: str, unpin: bool):
         raise click.ClickException(f"no lesson with id {entry_id!r} (see `portaw memory list`)")
     save_lessons([replace(e, pinned=not unpin) if e.id == hit.id else e for e in entries])
     click.echo(f"{'unpinned' if unpin else 'pinned ★'} {hit.id}: {hit.body[:60]}")
+
+
+@memory.command("rm")
+@click.argument("entry_ids", nargs=-1, required=True)
+def memory_rm(entry_ids: tuple[str, ...]):
+    """Remove lesson(s) by id (curation — e.g. a superseded duplicate)."""
+    from portaw.memory.store import load_lessons, save_lessons
+
+    entries = load_lessons()
+    drop = {e.id for e in entries for want in entry_ids
+            if e.id == want or e.id.startswith(want)}
+    if not drop:
+        raise click.ClickException(f"no lesson matches {', '.join(entry_ids)}")
+    save_lessons([e for e in entries if e.id not in drop])
+    click.echo(f"removed {len(drop)}: {', '.join(sorted(drop))}")
+
+
+@memory.command("capture")
 @click.option("--trigger", required=True, help="What went wrong (short).")
 @click.option("--fix", required=True, help="What to do instead.")
 @click.option("--symbol", "symbols", multiple=True)
