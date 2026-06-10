@@ -118,6 +118,15 @@ build order — READ IT before touching L3). What landed:
    CC transcript (Stop `transcript_path`), pairs an errored Bash call with a later succeeding
    NEAR-VARIANT (Jaccard ≥0.34, inline `-c/-e` blobs + >150-char one-offs skipped) → low-conf
    `FailureSignal`. Validated on a real transcript (54 Bash calls): 0 noise after tightening.
+   ⚠️ **DOGFOOD FINDING 2026-06-10:** the detector yields **0 signals on 5 real transcripts**
+   (incl. a 4.7MB one) → the auto-capture half is effectively inert in practice. Real fail→fix
+   is usually cross-tool (Bash→Edit/PowerShell), >4 calls apart, not a near-variant, or a long
+   piped one-off — all skipped. The HONEST conclusion: high-value lessons come from REFLECTION,
+   not Bash command-diffing (cf. the user's `mistakes-index.md` — semantic, curated). So:
+   (a) **manual `memory add` is the proven, working capture path** (conf 0.9 → trusted → injects;
+   demoed live); (b) **NEXT high-value build = a `mistakes-index.md` → lessons harvester**
+   (analogous to `seed.py`'s ADR harvest — the user's index is the gold lesson source, already
+   curated + cross-project); (c) loosen the Bash detector only if (b) proves insufficient.
 2. ~~**wire into real `~/.claude`** + **kernel-unify**~~ **DONE 2026-06-10.** capture-hook wired
    into CC Stop (settings.json, coexists w/ mistake-learning). kernel-unify resolved the
    inject collision WITHOUT a second hook: the live skill-router now (a) delegates ranking to
