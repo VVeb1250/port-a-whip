@@ -114,18 +114,24 @@ build order — READ IT before touching L3). What landed:
 
 ## Part 3.0 — NEXT (2026-06-10, supersedes the 2026-06-08 list below)
 
-1. **NL failure→fix detector** (`portaw/memory/detect.py`) — IN PROGRESS. The Stop hook
-   currently only acts on a structured `paw_lesson` payload, which nothing emits yet, so
-   capture is empty. Detector reads the CC transcript (Stop payload `transcript_path`),
-   finds a Bash failure → later success of a similar command, emits a `FailureSignal`.
-   Conservative + low-confidence (gate + recurrence decide). This is the §13 HIGH-risk
-   noisy part — keep it Bash-focused and high-signal first; generic NL later.
-2. **wire into real `~/.claude`** — `portaw memory enable` (Stop hook = safe no-op until
-   the detector emits). memory *inject* needs paw router enabled, which double-fires with
-   the standalone skill-router hook → that's the **kernel-unify** track (merge paw kernel
-   with the live skill-router hook so ONE ranker runs).
-3. **Codex/Gemini Stop live** — `_STOP_EVENT` is best-guess; confirm per host. Cross-host
-   capture = the portability moat proof.
+1. ~~**NL failure→fix detector** (`portaw/memory/detect.py`)~~ **DONE 2026-06-10.** Reads the
+   CC transcript (Stop `transcript_path`), pairs an errored Bash call with a later succeeding
+   NEAR-VARIANT (Jaccard ≥0.34, inline `-c/-e` blobs + >150-char one-offs skipped) → low-conf
+   `FailureSignal`. Validated on a real transcript (54 Bash calls): 0 noise after tightening.
+2. ~~**wire into real `~/.claude`** + **kernel-unify**~~ **DONE 2026-06-10.** capture-hook wired
+   into CC Stop (settings.json, coexists w/ mistake-learning). kernel-unify resolved the
+   inject collision WITHOUT a second hook: the live skill-router now (a) delegates ranking to
+   paw `kernel.ranking.route` (ONE ranker; inline = zero-paw fallback, pinned by
+   `tests/test_skill_router_parity.py` 14/14) and (b) surfaces paw memory(+sets) via
+   `router.paw_block` through that one hook. **Memory inject is LIVE end-to-end.** Source =
+   `integration/skill-router.py` (edit there + copy over; `~/.claude/hooks/*` is nah hard-
+   protected — `nah trust` does NOT clear it, copy from your own shell). See integration/README.
+   ⚠️ `nah trust "…skill-router.py"` is still set on this box — `nah forget` to re-tighten once
+   you're done deploying.
+3. **Codex/Gemini live** — capture Stop `_STOP_EVENT` is best-guess (confirm per host); and the
+   paw_block bridge is CC-only so far. On Codex/Gemini there is no standalone skill-router to
+   ride, so paw's OWN router hook (`portaw router enable --host …`) IS the single hook there —
+   wire + dogfood. Cross-host = the portability moat proof.
 4. **embedding tier-2** — lazy/optional, reuse the skill-router multilingual model.
 5. **DOGFOOD-PENDING new item** — bench symbol+path-anchor precision vs codegraph multi-hop
    (is the multi-hop bonus worth its setup? expect ~80/20 in favor of the zero-setup floor).

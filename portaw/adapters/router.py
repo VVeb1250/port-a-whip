@@ -95,6 +95,25 @@ def memory_block(prompt: str) -> str:
         return ""
 
 
+def paw_block(prompt: str) -> str:
+    """Combined paw context (sets + L3 memory) as INNER text for an external hook
+    to append — the kernel-unify integration point.
+
+    On a host that already runs another UserPromptSubmit hook (the author's live
+    skill-router), paw injects THROUGH that one hook instead of wiring a second,
+    competing hook: skill-router calls this and appends the result. Same silence
+    bias + composition as ``run_hook`` minus the JSON envelope. Safe → '' on any
+    error or a too-short prompt, so the caller never breaks."""
+    try:
+        if len((prompt or "").strip()) < _MIN_PROMPT_LEN:
+            return ""
+        hits = route_prompt(prompt)
+        blocks = [b for b in (format_context(hits) if hits else "", memory_block(prompt)) if b]
+        return "\n".join(blocks)
+    except Exception:
+        return ""
+
+
 # ----------------------------------------------------------------- hook entry
 
 def run_hook(stdin_text: str | None = None, host: HostId = "claude-code") -> str | None:
