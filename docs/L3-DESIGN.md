@@ -322,8 +322,11 @@ version of the pattern these services validated.
 - [x] hot-tier eviction — budget-adaptive (activation cap), not a fixed threshold.
 - [x] node-id reconcile — path+symbol always stored (stable); codegraph node optional,
       lazy-fallback at retrieval (no repair daemon).
-- [ ] cross-host detector parity — `detect.py` is CC-transcript-shaped; confirm/port the
-      transcript format for Codex/Gemini (the structured `paw_lesson` path is host-neutral).
+- [ ] cross-host detector parity — Codex **router** portability is live host-turn
+      verified (2026-06-10), but L3 **capture** is still unproven outside CC:
+      `detect.py` is CC-transcript-shaped and Codex/Gemini Stop events remain
+      best-guess. Confirm/port transcript format before enabling memory capture
+      there (the structured `paw_lesson` path is host-neutral).
 
 ## 14. Build order (for /plan)
 

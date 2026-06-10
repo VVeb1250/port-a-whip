@@ -52,4 +52,9 @@ Different layers, no hook collision. Full-set hosts: claude-code, gemini, cursor
 | Gemini CLI | ✅ `BeforeAgent` | 1 |
 | Cursor / OpenCode | ⚠️ static only | 2 |
 
+Codex note (2026-06-10): the router hook path has been tested against real
+`~/.codex/config.toml` TOML wiring, smoke-tested via `portaw router run --host codex`,
+and confirmed in a fresh Codex host turn. L3 Stop-hook capture still needs live
+host confirmation.
+
 ## By whipforaweep

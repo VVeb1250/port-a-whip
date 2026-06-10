@@ -83,16 +83,34 @@
 
 ---
 
-## 5. [ ] Gemini + Codex router adapter — LIVE fire (build done, never run live)
+## 5. [~] Gemini + Codex router adapter — Codex router LIVE; Gemini still open
 
-**Why:** Phase-2 adapters are schema-verified + unit-tested; Codex live-probed vs a real config copy; **Gemini NEVER fired live** (CLI not installed — only `~/.gemini/antigravity/`). Codex hook also never fired in a real session.
+**2026-06-10 Codex proof:** `portaw` console script is on PATH (`0.3.0`);
+Codex/TOML subset tests pass (`56 passed`); full suite passes (`164 passed`);
+`portaw router run --host codex` emits valid hook JSON with
+`hookEventName=UserPromptSubmit` and `additionalContext` when fed byte stdin;
+real `~/.codex/config.toml` is now patched via
+`portaw router enable --host codex` (backup `config.toml.paw-bak-20260610T080120Z`);
+`portaw router status --host codex` => `wired=True`; `portaw doctor` parses
+Codex TOML OK. **Fresh-session host-turn proof also passed:** Codex saw the
+injected `paw router:` block and reported suggested sets `secure-agent` and
+`design-quality`. The visible block did not print the event name, but its timing
+is consistent with `UserPromptSubmit`. The staged-diff review had no findings
+because `git diff --cached` was empty.
+
+**Why:** Phase-2 adapters are schema-verified + unit-tested; Codex router is now
+wired, CLI-hook-smoked, and live host-turn verified; **Gemini NEVER fired live**
+(CLI not installed — only `~/.gemini/antigravity/`). L3 Codex/Gemini Stop capture
+remains separate and unverified.
 
 **Steps (when a Gemini/Codex host exists):**
-1. `portaw router enable --host gemini` (or codex) — patches the host hook cfg (BeforeAgent / UserPromptSubmit).
-2. Start that host, submit a routing-shaped prompt (e.g. "scan staged diff for secrets").
-3. Confirm the `paw router:` additionalContext block actually appears + correct `hookEventName`.
+1. Codex router: DONE. Keep dogfooding in normal use; log any false positives.
+2. Codex L3 capture: do NOT enable until Stop event + transcript format are confirmed.
+3. Gemini: `portaw router enable --host gemini` — patches BeforeAgent; then repeat
+   the same live-fire check.
 
-**Result → ** flip spec §15 / CLAUDE.md Phase-2 Gemini box from "schema-verified" to "live".
+**Result → ** Codex router box is live; flip Gemini from "schema-verified" to "live"
+after an actual Gemini host turn.
 
 ---
 

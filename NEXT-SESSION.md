@@ -137,10 +137,21 @@ build order — READ IT before touching L3). What landed:
    protected — `nah trust` does NOT clear it, copy from your own shell). See integration/README.
    ⚠️ `nah trust "…skill-router.py"` is still set on this box — `nah forget` to re-tighten once
    you're done deploying.
-3. **Codex/Gemini live** — capture Stop `_STOP_EVENT` is best-guess (confirm per host); and the
-   paw_block bridge is CC-only so far. On Codex/Gemini there is no standalone skill-router to
-   ride, so paw's OWN router hook (`portaw router enable --host …`) IS the single hook there —
-   wire + dogfood. Cross-host = the portability moat proof.
+3. **Codex/Gemini live** — **Codex router is LIVE-VERIFIED 2026-06-10**:
+   `portaw router enable --host codex` patched the real `~/.codex/config.toml`
+   (`config.toml.paw-bak-20260610T080120Z`), `portaw router status --host codex`
+   reports `wired=True`, and `portaw doctor` parse-validates the Codex TOML. The
+   console hook path was smoke-tested with byte stdin:
+   `portaw router run --host codex` emits `hookSpecificOutput.additionalContext`
+   with `hookEventName=UserPromptSubmit`. **Host-turn proof complete:** in a fresh
+   Codex session the injected `paw router:` block appeared and suggested
+   `secure-agent` + `design-quality`; Codex reported the event as consistent with
+   `UserPromptSubmit` (block visible after the prompt; event name not printed in
+   the human-visible block).
+   **Do NOT overclaim L3 capture yet:** capture Stop `_STOP_EVENT` remains
+   best-guess for Codex/Gemini; verify before enabling memory capture there.
+   Gemini router remains schema/unit-tested only. Cross-host = the portability
+   moat proof.
 4. **embedding tier-2** — lazy/optional, reuse the skill-router multilingual model.
 5. **DOGFOOD-PENDING new item** — bench symbol+path-anchor precision vs codegraph multi-hop
    (is the multi-hop bonus worth its setup? expect ~80/20 in favor of the zero-setup floor).
