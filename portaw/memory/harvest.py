@@ -51,7 +51,7 @@ def _section_stack(section: str) -> str:
     """A language/framework section name → its stack key (else '')."""
     for tok in tokenize(section):
         if tok in _STACK_SECTIONS:
-            return "golang" if tok == "golang" else tok
+            return tok
     return ""
 
 

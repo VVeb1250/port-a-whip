@@ -102,7 +102,9 @@ def recall(
 
     base = relevance + anchor_weight × anchor_overlap   (structural can surface a
     lexically-silent entry, like prerequisite fan-out). final = base × confidence
-    × activation. Entries below base_floor are dropped → silence is the default.
+    × activation. Entries below base_floor are dropped → silence is the default —
+    EXCEPT pinned entries: pinned = always-on tier (schema contract), so the floor
+    never silences them; inject's budget is their only cap.
     """
     query = query or AnchorQuery()
     ctx = ctx or RetrievalContext()
@@ -124,7 +126,7 @@ def recall(
         rel = rel_by_id.get(e.id, 0.0)
         anc = overlap(e.anchors, query)
         base = rel + cfg.anchor_weight * anc
-        if base < cfg.base_floor:
+        if base < cfg.base_floor and not e.pinned:
             continue
         act = activation(e, today, cfg)
         scored.append(

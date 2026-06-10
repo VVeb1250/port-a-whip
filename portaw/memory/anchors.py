@@ -62,6 +62,12 @@ def overlap(anchors: Anchors, query: AnchorQuery) -> float:
     total = len(entry_syms) + len(entry_paths)
     hits += len(entry_syms & q_syms)
     for ep in entry_paths:
-        if any(ep == qp or qp.endswith(ep) or ep.endswith(qp) for qp in q_paths):
+        if any(_path_match(ep, qp) for qp in q_paths):
             hits += 1
     return hits / total if total else 0.0
+
+
+def _path_match(a: str, b: str) -> bool:
+    """Suffix match at a path-component boundary only — `a/b.py` hits `repo/a/b.py`,
+    but `b.py` must NOT hit `ab.py` (a bare suffix would false-positive)."""
+    return a == b or a.endswith("/" + b) or b.endswith("/" + a)

@@ -112,6 +112,45 @@ build order — READ IT before touching L3). What landed:
 
 ---
 
+## Part 3.0a — UPDATE 2026-06-11 (hardening audit + live-inject surfaces P0–P3)
+
+**Audit round 2 (all fixed, +12 tests):** pinned now BYPASSES the recall floor (was
+silently relevance-gated — schema said always-on); `memory recall` CLI derives
+`RetrievalContext` (stack:*/project:* lessons were ineligible-forever against the empty
+default ctx); `upsert` merges pin+max-confidence on bump (re-add with `--pin` used to drop
+the pin) + new `memory pin <id>` / `--unpin` + `memory list` shows ids; harvest re-key
+preserves store-side pins AND replaces a REWORDED index line's stale twin by mistake-id
+(was: dup forever); store reads never crash (`errors=replace` + OSError→[]); writes use
+pid-tmp + Windows replace-retry; anchor path match needs a `/` boundary (`b.py` no longer
+hits `ab.py`); consolidate protects confidence ≥0.9 from auto-archive; inject budget skips
+an oversized item instead of breaking; embed corpus cache keys on model dir + capped.
+
+**Live-inject surfaces (P0–P3, +18 tests, 216 total):**
+- **P0** `memory_block` (live hook path) now gets ctx (cwd→stacks/project) + LAZY tier-2
+  embed (`lazy_embedder` — onnx loads ONLY on a tier-1 miss, never on the hot path) +
+  session dedup. `route_prompt` got the same lazy embed → Codex/Gemini skill routing is
+  cross-lingual now. `paw_block(prompt, cwd, session_id)` (back-compat defaults);
+  integration/skill-router.py passes payload cwd/session_id (TypeError-fallback for old paw).
+- **P1** SessionStart pinned tier: `memory session-hook` + `session_select` (PINNED-ONLY by
+  silence doctrine, eligibility-filtered, 300-tok cap) → the always-on guarantee that can
+  replace the auto-loaded mistakes-index 1:1. `source=compact` resets the session log so
+  pins re-fire after compaction.
+- **P2** PostToolUse Bash-failure recall: `memory tool-hook` routes on stderr error text
+  (precision-gated by failure markers) → the fix injects WHILE the mistake happens.
+- **P3** PostToolUse Edit/Write anchor recall: structural half finally live (was dead —
+  query always empty in production). No embed on the tool path (latency budget). base>0
+  filter keeps pins off the tool surface. All surfaces share `~/.paw/session/<id>.json`
+  dedup (TTL 2d).
+- Wiring: `memory inject-enable session|tool|all` (CC-only v1 — PostToolUse/SessionStart
+  contracts unverified elsewhere; TOML+matcher refuses loudly). NOT yet enabled live.
+
+**NEXT (single-source migration, user-gated):** pin 4 HIGH universals (py-command,
+path-backslash, ps-null-coalesce, bash-wsl) → `memory harvest --confirm` (real store) →
+`memory inject-enable all` → copy integration/skill-router.py over (user shell, nah) →
+user disables the mistakes-index auto-load in ~/.claude/CLAUDE.md. Known cost to fix
+later: on a full tier-1 miss the live CC process can load TWO MiniLM copies (skill-router's
+hooks/embed.py + portaw.kernel.embed) — unify like kernel-unify did for TF-IDF.
+
 ## Part 3.0 — NEXT (2026-06-10, supersedes the 2026-06-08 list below)
 
 1. ~~**NL failure→fix detector** (`portaw/memory/detect.py`)~~ **DONE 2026-06-10.** Reads the

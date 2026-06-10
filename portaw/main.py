@@ -343,12 +343,20 @@ def memory():
 @click.argument("prompt", nargs=-1, required=True)
 @click.option("--symbol", "symbols", multiple=True, help="Edit-target symbol(s) being touched.")
 @click.option("--path", "paths", multiple=True, help="Edit-target path(s) being touched.")
+@click.option("--stack", "stacks", multiple=True,
+              help="Host stack(s) for eligibility (default: auto-detected from cwd markers).")
+@click.option("--project", "project_id", default=None,
+              help="Project id for project:* eligibility (default: cwd name).")
 @click.option("--embed", "use_embed", is_flag=True,
               help="Enable tier-2 semantic fallback (cross-lingual/paraphrase; needs [embed] extra).")
 def memory_recall(prompt: tuple[str, ...], symbols: tuple[str, ...],
-                  paths: tuple[str, ...], use_embed: bool):
+                  paths: tuple[str, ...], stacks: tuple[str, ...],
+                  project_id: str | None, use_embed: bool):
     """Dry-run retrieval: what memory would inject for a prompt (+ optional edit-target)."""
+    from pathlib import Path
+
     from portaw.memory.anchors import AnchorQuery
+    from portaw.memory.context import host_context
     from portaw.memory.inject import format_memory, select
     from portaw.memory.retrieval import recall
     from portaw.memory.store import load_lessons, load_project
@@ -364,7 +372,11 @@ def memory_recall(prompt: tuple[str, ...], symbols: tuple[str, ...],
         if embed_fn is None:
             click.echo("(--embed requested but model/libs unavailable — TF-IDF only)", err=True)
     q = AnchorQuery(symbols=tuple(symbols), paths=tuple(paths))
-    scored = recall(" ".join(prompt), entries, query=q, embed_fn=embed_fn)
+    # Without a context, every stack:* / project:* lesson is ineligible and dies
+    # silently — derive one from the cwd so scoped lessons can actually fire.
+    ctx = host_context(Path.cwd(), stacks=frozenset(stacks) or None,
+                       project_id=project_id)
+    scored = recall(" ".join(prompt), entries, query=q, ctx=ctx, embed_fn=embed_fn)
     selected = select(scored)
     block = format_memory(selected)
     if not block:
@@ -390,7 +402,8 @@ def memory_list(etype: str | None):
         return
     for e in sorted(entries, key=lambda x: -x.recurrence):
         pin = "★" if e.pinned else " "
-        click.echo(f"  {pin} [{e.type:<7}] {e.applicability:<16} ×{e.recurrence:<3} {e.body[:70]}")
+        click.echo(f"  {pin} {e.id} [{e.type:<7}] {e.applicability:<16} "
+                   f"×{e.recurrence:<3} {e.body[:60]}")
 
 
 @memory.command("add")
@@ -420,10 +433,12 @@ def memory_add(body, etype, scope, applicability, triggers, symbols, paths, pin,
         upsert,
     )
 
+    from pathlib import Path
+
     scope = scope or ("global" if etype == "lesson" else "project")
     entry = MemoryEntry.new(
         etype, " ".join(body), scope,
-        applicability=applicability if etype == "lesson" else f"project:{scope}",
+        applicability=applicability if etype == "lesson" else f"project:{Path.cwd().name}",
         trigger_terms=tuple(triggers),
         anchors=Anchors(symbols=tuple(symbols), paths=tuple(paths)),
         pinned=pin, confidence=confidence,
@@ -437,7 +452,21 @@ def memory_add(body, etype, scope, applicability, triggers, symbols, paths, pin,
     click.echo(f"added [{etype}] {entry.id}: {entry.body[:60]}")
 
 
-@memory.command("capture")
+@memory.command("pin")
+@click.argument("entry_id")
+@click.option("--unpin", is_flag=True, help="Remove the always-on flag instead.")
+def memory_pin(entry_id: str, unpin: bool):
+    """Pin/unpin an existing lesson by id (always-on tier — bypasses the recall floor)."""
+    from dataclasses import replace
+
+    from portaw.memory.store import load_lessons, save_lessons
+
+    entries = load_lessons()
+    hit = next((e for e in entries if e.id == entry_id or e.id.startswith(entry_id)), None)
+    if hit is None:
+        raise click.ClickException(f"no lesson with id {entry_id!r} (see `portaw memory list`)")
+    save_lessons([replace(e, pinned=not unpin) if e.id == hit.id else e for e in entries])
+    click.echo(f"{'unpinned' if unpin else 'pinned ★'} {hit.id}: {hit.body[:60]}")
 @click.option("--trigger", required=True, help="What went wrong (short).")
 @click.option("--fix", required=True, help="What to do instead.")
 @click.option("--symbol", "symbols", multiple=True)
@@ -532,6 +561,70 @@ def memory_capture_hook(host: str):
     raise SystemExit(0)
 
 
+@memory.command("session-hook")
+def memory_session_hook():
+    """SessionStart entrypoint: inject pinned lessons once per session. Never fails."""
+    try:
+        from portaw.adapters.memory_hooks import run_session_hook
+
+        out = run_session_hook()
+        if out:
+            click.echo(out)
+    except Exception:
+        pass
+    raise SystemExit(0)
+
+
+@memory.command("tool-hook")
+def memory_tool_hook():
+    """PostToolUse entrypoint: Bash-failure / edit-anchor recall. Never fails."""
+    try:
+        from portaw.adapters.memory_hooks import run_tool_hook
+
+        out = run_tool_hook()
+        if out:
+            click.echo(out)
+    except Exception:
+        pass
+    raise SystemExit(0)
+
+
+@memory.command("inject-enable")
+@click.argument("surface", type=click.Choice(["session", "tool", "all"]))
+@click.option("--host", default="claude-code")
+def memory_inject_enable(surface: str, host: str):
+    """Wire a live-inject surface (SessionStart pins / PostToolUse recall)."""
+    from portaw.memory.hookwire import enable_inject
+
+    names = ["session", "tool"] if surface == "all" else [surface]
+    for name in names:
+        try:
+            changed, backup = enable_inject(name, host)  # type: ignore[arg-type]
+        except ValueError as e:
+            raise click.ClickException(str(e))
+        if changed:
+            b = f" (backup {backup.name})" if backup else ""
+            click.echo(f"inject '{name}' enabled on {host}{b} — takes effect next session")
+        else:
+            click.echo(f"inject '{name}' already wired on {host}")
+
+
+@memory.command("inject-disable")
+@click.argument("surface", type=click.Choice(["session", "tool", "all"]))
+@click.option("--host", default="claude-code")
+def memory_inject_disable(surface: str, host: str):
+    """Remove a live-inject surface."""
+    from portaw.memory.hookwire import disable_inject
+
+    names = ["session", "tool"] if surface == "all" else [surface]
+    for name in names:
+        try:
+            removed = disable_inject(name, host)  # type: ignore[arg-type]
+        except ValueError as e:
+            raise click.ClickException(str(e))
+        click.echo(f"inject '{name}' {'disabled' if removed else 'was not wired'} on {host}")
+
+
 @memory.command("consolidate")
 @click.option("--dry-run", is_flag=True, help="Show what would change without writing.")
 def memory_consolidate(dry_run: bool):
@@ -609,19 +702,35 @@ def memory_harvest(src: str | None, project_id: str, confirm: bool):
         click.echo("\n(preview — re-run with --confirm to write global lessons)")
         return
     # Index is authoritative → re-key by id so a re-harvest is idempotent (no recurrence
-    # inflation). Keep the larger recurrence so a live-bumped twin is never demoted.
+    # inflation). Keep the larger recurrence + any store-side pin (live state the index
+    # doesn't know about). A REWORDED index line changes the content-hash id — match the
+    # stale twin by its mistake-id (trigger_terms[0]) and replace it, don't duplicate.
     by_id = {e.id: e for e in load_lessons()}
-    added = updated = 0
+    added = updated = replaced = 0
     for e in harvested:
+        mid = e.trigger_terms[0] if e.trigger_terms else ""
         prev = by_id.get(e.id)
         if prev is None:
-            by_id[e.id] = e
-            added += 1
+            stale = next(
+                (x for x in by_id.values()
+                 if x.type == "lesson" and x.trigger_terms[:1] == (mid,)),
+                None,
+            ) if mid else None
+            if stale is not None:
+                del by_id[stale.id]
+                prev, replaced = stale, replaced + 1
+            else:
+                added += 1
         else:
-            by_id[e.id] = replace(e, recurrence=max(e.recurrence, prev.recurrence))
             updated += 1
+        if prev is not None:
+            e = replace(e, recurrence=max(e.recurrence, prev.recurrence),
+                        pinned=e.pinned or prev.pinned)
+        by_id[e.id] = e
     save_lessons(list(by_id.values()))
-    click.echo(f"\nwrote {added} new + {updated} updated lesson(s) to the global store.")
+    click.echo(f"\nwrote {added} new + {updated} updated"
+               + (f" + {replaced} reworded" if replaced else "")
+               + " lesson(s) to the global store.")
 
 
 if __name__ == "__main__":

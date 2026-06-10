@@ -40,10 +40,12 @@ def project_dir(root: Path | str | None = None) -> Path:
 
 def _read_jsonl(path: Path) -> list[MemoryEntry]:
     """Load entries, skipping malformed lines (tolerant — never crash recall)."""
-    if not path.exists():
-        return []
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []  # unreadable store (perms/race) degrades to empty, not a crash
     entries: list[MemoryEntry] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in text.splitlines():
         line = line.strip()
         if not line:
             continue
@@ -61,9 +63,29 @@ def _write_jsonl(path: Path, entries: list[MemoryEntry]) -> None:
     except OSError as e:
         raise MemoryStoreError(f"cannot create store dir {path.parent}: {e}") from e
     body = "\n".join(json.dumps(e.to_raw(), ensure_ascii=False) for e in entries)
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    # pid-suffixed tmp: two concurrent writers (Stop hooks) never interleave into
+    # the SAME tmp file; last os.replace wins whole, store never half-written.
+    tmp = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
     tmp.write_text(body + ("\n" if body else ""), encoding="utf-8")
-    os.replace(tmp, path)  # atomic on same filesystem (Windows + POSIX)
+    try:
+        _replace_with_retry(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)  # leftover only when replace failed
+
+
+def _replace_with_retry(tmp: Path, path: Path, attempts: int = 3) -> None:
+    """os.replace is atomic, but on Windows it raises PermissionError while a
+    concurrent reader holds the destination open — brief retry covers that window."""
+    import time
+
+    for i in range(attempts):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if i == attempts - 1:
+                raise MemoryStoreError(f"store busy, could not replace {path}")
+            time.sleep(0.05 * (i + 1))
 
 
 # --- lessons (global) ---
@@ -103,12 +125,20 @@ def upsert(
 
     Dedup key = id (content hash). Pure — caller persists the result. This is the
     free cross-project dedup: same body → same id → recurrence++ instead of a dup.
+    A bump also merges the incoming pin + max confidence, so re-adding a lesson
+    with `--pin` actually pins it (a sticky flag, never silently dropped).
     """
+    from dataclasses import replace
+
     out: list[MemoryEntry] = []
     found = False
     for e in entries:
         if e.id == entry.id:
-            out.append(e.bumped(last_seen=last_seen))
+            out.append(replace(
+                e.bumped(last_seen=last_seen),
+                pinned=e.pinned or entry.pinned,
+                confidence=max(e.confidence, entry.confidence),
+            ))
             found = True
         else:
             out.append(e)

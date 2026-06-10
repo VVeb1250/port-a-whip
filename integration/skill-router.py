@@ -335,13 +335,19 @@ def semantic_fallback(prompt):
         return []
 
 
-def _paw_block(prompt):
+def _paw_block(prompt, payload=None):
     """kernel-unify bridge: surface paw L3 memory (+sets) through THIS one hook
     instead of a second competing UserPromptSubmit hook. paw is editable-installed
-    under the same interpreter; absent/any error -> '' (standalone, like embed)."""
+    under the same interpreter; absent/any error -> '' (standalone, like embed).
+    cwd + session_id ride along (2026-06-11): cwd -> stack/project eligibility,
+    session_id -> the inject dedup log. Older paw without the params still works."""
     try:
         from portaw.adapters.router import paw_block
-        return paw_block(prompt)
+        p = payload or {}
+        try:
+            return paw_block(prompt, p.get("cwd") or None, p.get("session_id") or "")
+        except TypeError:
+            return paw_block(prompt)
     except Exception:
         return ""
 
@@ -441,7 +447,7 @@ def main():
         semantic = bool(results)
     # kernel-unify: paw L3 memory (+sets) rides this one hook, independent of a
     # skill match, so memory still surfaces on a prompt no skill answers.
-    paw = _paw_block(prompt)
+    paw = _paw_block(prompt, payload)
     blocks = []
     if results and not router_log_gate(payload, prompt, sig, results):
         # cooldown suppresses a duplicate back-to-back SKILL suggestion (and

@@ -55,15 +55,57 @@ def select(scored: list[Scored], cfg: InjectConfig | None = None) -> list[Scored
     seen: set[str] = set()
     budget = cfg.max_tokens
     for s in ordered:
+        if len(out) >= cfg.max_items:
+            break
         if s.entry.id in seen:
             continue
         cost = approx_tokens(s.entry.body)
-        if cost > budget or len(out) >= cfg.max_items:
-            break
+        if cost > budget:
+            continue  # this one doesn't fit — a cheaper lower-ranked one still may
         out.append(s)
         seen.add(s.entry.id)
         budget -= cost
     return out
+
+
+def session_select(
+    entries: list[MemoryEntry],
+    *,
+    ctx: "RetrievalContext | None" = None,
+    max_tokens: int = 300,
+    max_items: int = 8,
+) -> list[MemoryEntry]:
+    """The SessionStart pinned tier: which entries inject ONCE at session start.
+
+    PINNED-ONLY by doctrine — injecting unpinned entries with no prompt to be
+    relevant to is exactly the false-inject the silence bias exists to prevent.
+    Pinned = the human said "always-on"; eligibility (stack/project) still filters
+    so a pin for another stack stays quiet. Budget-capped like select()."""
+    from portaw.memory.retrieval import RetrievalContext, is_eligible
+
+    ctx = ctx or RetrievalContext()
+    out: list[MemoryEntry] = []
+    budget = max_tokens
+    for e in entries:
+        if not e.pinned or not is_eligible(e, ctx):
+            continue
+        cost = approx_tokens(e.body)
+        if cost > budget or len(out) >= max_items:
+            continue
+        out.append(e)
+        budget -= cost
+    return out
+
+
+def format_session(selected: list[MemoryEntry]) -> str:
+    """SessionStart pin block. Empty selection → empty string (silent)."""
+    if not selected:
+        return ""
+    lines = ["\U0001f4a1 paw memory (session pins):"]
+    for e in selected:
+        rec = f" (×{e.recurrence})" if e.recurrence > 1 else ""
+        lines.append(f"• ★ {e.body}{rec}")
+    return "\n".join(lines)
 
 
 def format_memory(selected: list[Scored]) -> str:
@@ -86,9 +128,16 @@ def memory_context(
     ctx: RetrievalContext | None = None,
     inject_cfg: InjectConfig | None = None,
     retrieval_cfg: RetrievalConfig | None = None,
+    embed_fn=None,
+    exclude: set[str] | None = None,
     today: date | None = None,
 ) -> str:
-    """recall → select → format. '' when silent. Pure over the entries it's given."""
+    """recall → select → format. '' when silent. Pure over the entries it's given.
+
+    `exclude` = ids this session already injected (the dedup log) — an entry the
+    conversation already contains must not re-inject."""
     scored = recall(prompt, entries, query=query, ctx=ctx,
-                    cfg=retrieval_cfg, today=today)
+                    cfg=retrieval_cfg, embed_fn=embed_fn, today=today)
+    if exclude:
+        scored = [s for s in scored if s.entry.id not in exclude]
     return format_memory(select(scored, inject_cfg))

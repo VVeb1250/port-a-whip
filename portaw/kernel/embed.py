@@ -118,9 +118,16 @@ def _encode(texts, md: Path | str | None = None):
     return (emb / norm).astype(np.float32)
 
 
-def _signature(caps: list[Capability]) -> str:
-    """Stable hash of the corpus (names + text) — cache key for the vector matrix."""
+_CACHE_MAX = 8  # distinct corpora cached per process (hooks are short-lived anyway)
+
+
+def _signature(caps: list[Capability], md: Path | str | None = None) -> str:
+    """Stable hash of the corpus (names + text + MODEL DIR) — cache key for the
+    vector matrix. The model dir is part of the key: vectors from two different
+    models share no space, so a mid-process model switch must miss the cache."""
     h = hashlib.sha1()
+    h.update(str(model_dir(md)).encode("utf-8"))
+    h.update(b"\2")
     for c in caps:
         h.update(c.name.encode("utf-8"))
         h.update(b"\0")
@@ -134,12 +141,14 @@ def _corpus_matrix(caps: list[Capability], md: Path | str | None = None):
     re-embedded per call (corpus vectors are computed once)."""
     import numpy as np
 
-    sig = _signature(caps)
+    sig = _signature(caps, md)
     cached = _corpus_cache.get(sig)
     if cached is not None:
         return cached
     mat = _encode([c.text for c in caps], md) if caps else np.zeros((0, 1), np.float32)
     names = [c.name for c in caps]
+    if len(_corpus_cache) >= _CACHE_MAX:   # bounded — a long-lived process with a
+        _corpus_cache.clear()              # mutating corpus must not grow forever
     _corpus_cache[sig] = (mat, names)
     return mat, names
 
@@ -181,6 +190,22 @@ def embed_scores(
         return out
     except Exception:
         return {}
+
+
+def lazy_embedder(
+    md: Path | str | None = None, **kw
+) -> Callable[[str, list[Capability]], dict[str, float]]:
+    """route()-compatible embed_fn with ALL checks deferred to call time.
+
+    `make_embedder` front-loads `available()` — which imports onnxruntime — so a
+    LIVE hook paying that on every prompt would slow lexical hits too. This one
+    costs nothing until tier-1 actually misses; unavailable → {} (router stays on
+    the TF-IDF floor). Use this in hooks; `make_embedder` (None = honest signal
+    for a CLI warning) stays for explicit `--embed` flows."""
+    def _embed(prompt: str, caps: list[Capability]) -> dict[str, float]:
+        return embed_scores(prompt, caps, md=md, **kw)
+
+    return _embed
 
 
 def make_embedder(

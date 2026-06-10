@@ -43,3 +43,42 @@ def disable_capture(host: HostId) -> bool:
 
 def capture_status(host: HostId) -> dict:
     return status_hook(host, event=_event(host), marker=_CAPTURE_CMD)
+
+
+# --- live-inject surfaces (P1 SessionStart pins, P2/P3 PostToolUse) — CC-only v1:
+# the SessionStart/PostToolUse payload + matcher contracts are VERIFIED on
+# claude-code; other hosts get these after their contracts are live-checked.
+
+_SESSION_CMD = "portaw memory session-hook"
+_TOOL_CMD = "portaw memory tool-hook"
+_TOOL_MATCHER = "Bash|Edit|Write|MultiEdit|NotebookEdit"
+
+_INJECT_HOOKS: dict[str, tuple[str, str, str | None]] = {
+    # name → (command, event, matcher)
+    "session": (_SESSION_CMD, "SessionStart", None),
+    "tool": (_TOOL_CMD, "PostToolUse", _TOOL_MATCHER),
+}
+
+
+def _inject_spec(name: str, host: HostId) -> tuple[str, str, str | None]:
+    if host != "claude-code":
+        raise ValueError(f"inject hook '{name}' is claude-code-only for now "
+                         f"(SessionStart/PostToolUse contract unverified on '{host}')")
+    if name not in _INJECT_HOOKS:
+        raise ValueError(f"unknown inject hook '{name}' (session/tool)")
+    return _INJECT_HOOKS[name]
+
+
+def enable_inject(name: str, host: HostId = "claude-code") -> tuple[bool, Path | None]:
+    cmd, event, matcher = _inject_spec(name, host)
+    return enable_hook(host, command=cmd, event=event, marker=cmd, matcher=matcher)
+
+
+def disable_inject(name: str, host: HostId = "claude-code") -> bool:
+    cmd, event, _ = _inject_spec(name, host)
+    return disable_hook(host, event=event, marker=cmd)
+
+
+def inject_status(name: str, host: HostId = "claude-code") -> dict:
+    cmd, event, _ = _inject_spec(name, host)
+    return status_hook(host, event=event, marker=cmd)

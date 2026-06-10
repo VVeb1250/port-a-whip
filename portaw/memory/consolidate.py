@@ -19,6 +19,7 @@ from portaw.memory.schema import MemoryEntry
 class ConsolidationConfig:
     promote_min_recurrence: int = 3    # a project lesson recurred this much → widen scope
     archive_activation: float = 0.15   # below this (and unpinned) → archived as stale
+    protect_confidence: float = 0.9    # a vouched-this-strongly lesson never auto-archives
     activation_cfg: RetrievalConfig = RetrievalConfig()
 
 
@@ -86,7 +87,8 @@ def consolidate(
     archived: list[MemoryEntry] = []
     for e in promoted:
         act = activation(e, today, cfg.activation_cfg)
-        if not e.pinned and act < cfg.archive_activation:
+        protected = e.pinned or e.confidence >= cfg.protect_confidence
+        if not protected and act < cfg.archive_activation:
             archived.append(e)
         else:
             kept.append(e)

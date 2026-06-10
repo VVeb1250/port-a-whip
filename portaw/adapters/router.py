@@ -70,8 +70,15 @@ def default_command(host: HostId) -> str:
 # ----------------------------------------------------------------- ranking glue
 
 def route_prompt(prompt: str, cfg: RouteConfig | None = None) -> list[Hit]:
-    """Rank a prompt against the live capability registry."""
-    return route(prompt, build_capabilities(), cfg, build_intent_map())
+    """Rank a prompt against the live capability registry.
+
+    tier-2 embedding rides along lazily: zero cost on a lexical hit, and on a
+    tier-1 miss a cross-lingual/paraphrase prompt can still route (on hosts where
+    paw IS the router — Codex/Gemini — this is the only tier-2 they have)."""
+    from portaw.kernel.embed import lazy_embedder
+
+    return route(prompt, build_capabilities(), cfg, build_intent_map(),
+                 embed_fn=lazy_embedder())
 
 
 def format_context(hits: list[Hit]) -> str:
@@ -81,21 +88,38 @@ def format_context(hits: list[Hit]) -> str:
     return "\n".join(lines)
 
 
-def memory_block(prompt: str) -> str:
-    """L3 recall for the live hook (prompt-only — no edit-target). Safe → '' on any error."""
+def memory_block(prompt: str, cwd: str | None = None, session_id: str = "") -> str:
+    """L3 recall for the live hook. Safe → '' on any error.
+
+    Three things the dry-run CLI gets that a live hook must too (each one missing
+    silently kills a lesson class): host context (stack:*/project:* eligibility),
+    lazy tier-2 embedding (Thai/paraphrase prompts vs English corpora), and the
+    session dedup log (an already-injected lesson never re-injects)."""
     try:
-        from portaw.memory.inject import memory_context
+        from portaw.kernel.embed import lazy_embedder
+        from portaw.memory import sessionlog
+        from portaw.memory.context import host_context
+        from portaw.memory.inject import format_memory, select
+        from portaw.memory.retrieval import recall
         from portaw.memory.store import load_lessons, load_project
 
         entries = load_lessons() + load_project()
         if not entries:
             return ""
-        return memory_context(prompt, entries)
+        scored = recall(prompt, entries, ctx=host_context(cwd),
+                        embed_fn=lazy_embedder())
+        already = sessionlog.seen(session_id) if session_id else set()
+        if already:
+            scored = [s for s in scored if s.entry.id not in already]
+        selected = select(scored)
+        if selected and session_id:
+            sessionlog.mark(session_id, [s.entry.id for s in selected])
+        return format_memory(selected)
     except Exception:
         return ""
 
 
-def paw_block(prompt: str) -> str:
+def paw_block(prompt: str, cwd: str | None = None, session_id: str = "") -> str:
     """Combined paw context (sets + L3 memory) as INNER text for an external hook
     to append — the kernel-unify integration point.
 
@@ -108,7 +132,8 @@ def paw_block(prompt: str) -> str:
         if len((prompt or "").strip()) < _MIN_PROMPT_LEN:
             return ""
         hits = route_prompt(prompt)
-        blocks = [b for b in (format_context(hits) if hits else "", memory_block(prompt)) if b]
+        blocks = [b for b in (format_context(hits) if hits else "",
+                              memory_block(prompt, cwd, session_id)) if b]
         return "\n".join(blocks)
     except Exception:
         return ""
@@ -131,8 +156,11 @@ def run_hook(stdin_text: str | None = None, host: HostId = "claude-code") -> str
     prompt = (payload.get("prompt") or "").strip()
     if len(prompt) < _MIN_PROMPT_LEN or prompt.startswith("/"):
         return None
+    cwd = payload.get("cwd") or None
+    session_id = payload.get("session_id") or ""
     hits = route_prompt(prompt)
-    blocks = [b for b in (format_context(hits) if hits else "", memory_block(prompt)) if b]
+    blocks = [b for b in (format_context(hits) if hits else "",
+                          memory_block(prompt, cwd, session_id)) if b]
     if not blocks:
         return None
     event = _WIRING[host].event if host in _WIRING else "UserPromptSubmit"
@@ -172,7 +200,8 @@ def _is_wired_json(settings: dict, event: str, marker: str = _ROUTER_CMD) -> boo
     )
 
 
-def _enable_json(w: Wiring, command: str, marker: str = _ROUTER_CMD) -> tuple[bool, Path | None]:
+def _enable_json(w: Wiring, command: str, marker: str = _ROUTER_CMD,
+                 matcher: str | None = None) -> tuple[bool, Path | None]:
     settings: dict = {}
     if w.path.exists():
         try:
@@ -182,7 +211,10 @@ def _enable_json(w: Wiring, command: str, marker: str = _ROUTER_CMD) -> tuple[bo
     if _is_wired_json(settings, w.event, marker):
         return False, None
     hooks = settings.setdefault("hooks", {})
-    hooks.setdefault(w.event, []).append({"hooks": [{"type": "command", "command": command}]})
+    block: dict = {"hooks": [{"type": "command", "command": command}]}
+    if matcher:
+        block["matcher"] = matcher  # tool-scoped events (PostToolUse) — never fire wide
+    hooks.setdefault(w.event, []).append(block)
     return True, _write(w.path, json.dumps(settings, indent=2))
 
 
@@ -315,11 +347,16 @@ def _wiring_for(host: HostId, event: str) -> Wiring:
     return Wiring(path=w.path, fmt=w.fmt, event=event)
 
 
-def enable_hook(host: HostId, *, command: str, event: str, marker: str) -> tuple[bool, Path | None]:
+def enable_hook(host: HostId, *, command: str, event: str, marker: str,
+                matcher: str | None = None) -> tuple[bool, Path | None]:
     """Wire any command into a host's hook config under `event` (backup + idempotent)."""
     w = _wiring_for(host, event)
-    return (_enable_json(w, command, marker) if w.fmt == "json"
-            else _enable_toml(w, command, marker))
+    if w.fmt == "json":
+        return _enable_json(w, command, marker, matcher)
+    if matcher:
+        # Codex TOML matcher shape is unverified — refuse loudly, never guess-write
+        raise ValueError(f"matcher-scoped hook wiring unverified for TOML host '{host}'")
+    return _enable_toml(w, command, marker)
 
 
 def disable_hook(host: HostId, *, event: str, marker: str) -> bool:
