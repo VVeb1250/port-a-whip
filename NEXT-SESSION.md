@@ -96,10 +96,10 @@ build order — READ IT before touching L3). What landed:
 - "better than RAG" = structured+tiered+consolidated+graph-anchored recall, NOT a vector engine.
 - RAG-Anything REJECTED (cloud-API + framework swallows the layer + doc≠code domain).
 
-## Part 2 — Current state (2026-06-08)
+## Part 2 — Current state (2026-06-08, numbers superseded by Part 3.0a 2026-06-11)
 
 - **6 sets** in `registry/sets.json` (schema 0.3.1): efficiency-starter, secure-agent, context-quality, design-quality (DRAFT), web-research (DRAFT, CC measured), **browser-automation (NEW, DRAFT)**.
-- **73 tests pass.** Router L2 live (CC + Codex adapters built+tested; Gemini built, never fired live). token_profile v2 across all sets.
+- **~~73~~ 216 tests pass** (164 base L1-L3 + 52 live-inject surfaces audit round 2 2026-06-11). Router L2 live (CC + Codex adapters built+tested; Gemini built, never fired live). token_profile v2 across all sets.
 - **paw INSTALLED editable** (`pip install -e .`) → `portaw` on PATH; fallback `py -m portaw` (added `portaw/__main__.py`). PyPI wheel REBUILT @ 6 sets (twine PASS, clean-venv smoke PASS), still alpha-HOLD (no upload).
 - **What happened this session (2026-06-08):**
   - jcode (1jehuang, Rust HOST) vs paw analysed → NOT a dup (different layer); L3-axis warning + GUI Phase-4 candidate jotted (deep-vet §7, CLAUDE.md).
