@@ -25,10 +25,19 @@ def test_roundtrip_to_raw_from_raw_preserves_all_fields():
         "lesson", "trigger -> fix", "global",
         trigger_terms=("python", "windows"),
         anchors=Anchors(symbols=("run_build",), paths=("a/b.py",)),
-        applicability="stack:windows", confidence=0.9, recurrence=3, pinned=True,
+        applicability="stack:windows", confidence=0.9, recurrence=3, misses=2,
+        pinned=True,
     )
     back = MemoryEntry.from_raw(e.to_raw())
     assert back == e
+
+
+def test_from_raw_tolerates_pre_misses_records():
+    """Records written before the misses field existed load as misses=0."""
+    e = MemoryEntry.new("lesson", "old record", "global")
+    raw = e.to_raw()
+    del raw["misses"]
+    assert MemoryEntry.from_raw(raw).misses == 0
 
 
 def test_anchors_is_empty():

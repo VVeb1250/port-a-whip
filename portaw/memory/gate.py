@@ -20,6 +20,8 @@ class GateConfig:
     universal_min_confidence: float = 0.75  # universal blast radius → highest bar
     universal_min_recurrence: int = 2     # …unless it has recurred (proven real)
     project_needs_confirm: bool = True     # human-confirm project-memory writes
+    miss_distrust: int = 3                # error recurred this often AFTER the lesson
+    #                                       existed → the fix is proven NOT working
 
 
 @dataclass(frozen=True)
@@ -52,7 +54,16 @@ def trusted(entry: MemoryEntry, cfg: GateConfig | None = None) -> bool:
     confidence (the human asserting it = a vouch); auto-detected `hook`/`agent`
     lessons still have to earn it via confidence or recurrence."""
     cfg = cfg or GateConfig()
-    if entry.pinned or entry.applicability != "universal":
+    if entry.pinned:
+        return True  # the human said always-on — outranks every automatic signal
+    # effectiveness outranks scope AND recurrence: an error that kept firing AFTER
+    # this lesson existed proves the fix wrong/useless — injecting it again is the
+    # "confidently wrong" failure. Recurrence proves the PROBLEM is real, misses
+    # prove the ANSWER is not; the second must win or a popular wrong lesson is
+    # untouchable.
+    if entry.misses >= cfg.miss_distrust:
+        return False
+    if entry.applicability != "universal":
         return True
     return (
         entry.confidence >= cfg.universal_min_confidence

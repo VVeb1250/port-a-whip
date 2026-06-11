@@ -77,8 +77,9 @@ class MemoryEntry:
     provenance: str = "estimated"   # measured|calculated|vendor-claimed|estimated|neutral
     confidence: float = 0.5         # 0..1
     recurrence: int = 1             # xN — frequency substrate for ACT-R activation
+    misses: int = 0                 # error recurred AFTER this lesson existed (not working)
     last_seen: str = ""             # ISO date (recency substrate)
-    source: str = "user"            # "hook" | "user" | "agent"
+    source: str = "user"            # "hook" | "user" | "agent" | "sync"
     pinned: bool = False            # always-on tier (only highest-ROI universal)
 
     @property
@@ -116,6 +117,7 @@ class MemoryEntry:
             provenance=raw.get("provenance", "estimated"),
             confidence=float(raw.get("confidence", 0.5)),
             recurrence=int(raw.get("recurrence", 1)),
+            misses=int(raw.get("misses", 0)),
             last_seen=raw.get("last_seen", ""),
             source=raw.get("source", "user"),
             pinned=bool(raw.get("pinned", False)),
@@ -134,6 +136,7 @@ class MemoryEntry:
             "provenance": self.provenance,
             "confidence": self.confidence,
             "recurrence": self.recurrence,
+            "misses": self.misses,
             "last_seen": self.last_seen,
             "source": self.source,
             "pinned": self.pinned,

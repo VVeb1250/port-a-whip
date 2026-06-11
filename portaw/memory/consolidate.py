@@ -31,6 +31,7 @@ class ConsolidationResult:
     archived: list[MemoryEntry]
     merged_count: int
     promoted_count: int
+    weakened_count: int = 0   # lessons hit by the effectiveness signal this pass
 
 
 def merge_duplicates(entries: list[MemoryEntry]) -> tuple[list[MemoryEntry], int]:
@@ -65,13 +66,35 @@ def promote(entry: MemoryEntry, cfg: ConsolidationConfig) -> MemoryEntry:
     return entry
 
 
+def apply_effectiveness(
+    entries: list[MemoryEntry], new_misses: dict[str, int],
+) -> tuple[list[MemoryEntry], int]:
+    """Feed the observation ledger's effectiveness signal back into the lessons.
+
+    `new_misses` = lesson id → recurrences observed AFTER that lesson existed
+    (observations.recurring_despite_lesson). Such a lesson's fix is not working:
+    accumulate the misses on the entry (the trusted() gate distrusts at a cap)
+    and ease confidence down one decay step. Pinned is exempt — human override."""
+    out: list[MemoryEntry] = []
+    weakened = 0
+    for e in entries:
+        m = new_misses.get(e.id, 0)
+        if m > 0 and not e.pinned:
+            e = replace(e, misses=e.misses + m, confidence=decayed(e.confidence))
+            weakened += 1
+        out.append(e)
+    return out, weakened
+
+
 def consolidate(
     entries: list[MemoryEntry],
     *,
     today: date | None = None,
     cfg: ConsolidationConfig | None = None,
+    effectiveness: dict[str, int] | None = None,
 ) -> ConsolidationResult:
-    """merge → promote → archive-stale. Pure; caller saves kept + appends archived."""
+    """merge → promote → weaken-ineffective → archive-stale. Pure; caller saves
+    kept + appends archived (and consumes the effectiveness misses it passed)."""
     today = today or date.today()
     cfg = cfg or ConsolidationConfig()
 
@@ -84,6 +107,12 @@ def consolidate(
         if p != e:
             promoted_count += 1
         promoted.append(p)
+
+    weakened_count = 0
+    if effectiveness:
+        # before the archive sweep: a weakened entry that drops below the protect
+        # bar becomes archivable — exactly the fate a not-working lesson deserves
+        promoted, weakened_count = apply_effectiveness(promoted, effectiveness)
 
     kept: list[MemoryEntry] = []
     archived: list[MemoryEntry] = []
@@ -102,7 +131,7 @@ def consolidate(
         kept.append(e)
     # sort by activation ONLY (never compare the entry — see [sweep-tuple-sort])
     kept.sort(key=lambda e: activation(e, today, cfg.activation_cfg), reverse=True)
-    return ConsolidationResult(kept, archived, merged_count, promoted_count)
+    return ConsolidationResult(kept, archived, merged_count, promoted_count, weakened_count)
 
 
 # --- opportunistic trigger (the "async" in the async dream pass) ---
@@ -129,11 +158,33 @@ def maybe_consolidate(
                 return None
         except OSError:
             pass  # no marker yet → first run
+
+        # effectiveness signal: lessons whose error kept recurring after they
+        # existed. Gathered OUTSIDE the lessons lock (separate file, own lock).
+        misses: dict[str, int] = {}
+        consumed_sigs: list[str] = []
+        try:
+            from portaw.memory import observations
+
+            for r in observations.recurring_despite_lesson():
+                lid = r.get("lesson_id", "")
+                if lid:
+                    misses[lid] = misses.get(lid, 0) + observations.linked_misses(r)
+                    consumed_sigs.append(r["sig"])
+        except Exception:
+            misses, consumed_sigs = {}, []  # signal is optional, pass still runs
+
         with store.locked(store.lessons_path()):
-            res = consolidate(store.load_lessons(), today=today)
+            res = consolidate(store.load_lessons(), today=today, effectiveness=misses)
             # archive FIRST (crash between the writes = duplicate, never loss)
             store.append_archive(res.archived)
             store.save_lessons(res.kept)
+        if consumed_sigs:
+            # mark the misses as consumed AFTER the save landed — a crash before
+            # this re-applies the same decay next run (bounded), never loses it
+            from portaw.memory import observations
+
+            observations.consume(consumed_sigs)
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.touch()
         return res

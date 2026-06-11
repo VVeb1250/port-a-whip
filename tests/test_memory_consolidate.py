@@ -101,3 +101,59 @@ def test_maybe_consolidate_never_raises(monkeypatch):
 
     monkeypatch.setattr(store, "global_dir", boom)
     assert maybe_consolidate(today=TODAY) is None
+
+
+# --- effectiveness feedback (#8: misses → distrust + decay) ---
+
+def test_effectiveness_accumulates_misses_and_decays_confidence():
+    bad = _lesson("wrong fix", confidence=0.8, recurrence=5)
+    good = _lesson("fine fix", confidence=0.8)
+    pinned = _lesson("pinned fix", confidence=0.8, pinned=True)
+    res = consolidate([bad, good, pinned], today=TODAY,
+                      effectiveness={bad.id: 2, pinned.id: 4})
+    assert res.weakened_count == 1                       # pinned exempt
+    by_id = {e.id: e for e in res.kept}
+    assert by_id[bad.id].misses == 2
+    assert by_id[bad.id].confidence < 0.8                # one decay step
+    assert by_id[good.id].misses == 0 and by_id[good.id].confidence == 0.8
+    assert by_id[pinned.id].misses == 0
+
+
+def test_maybe_consolidate_feeds_observation_misses_and_consumes(tmp_path, monkeypatch):
+    import json as _json
+
+    from portaw.memory import observations
+
+    monkeypatch.setattr(store, "global_dir", lambda: tmp_path / "mem")
+    bad = _lesson("python → use py", confidence=0.9, recurrence=3)
+    store.save_lessons([bad])
+    obs_path = tmp_path / "mem" / "observations.jsonl"
+    obs_path.write_text(_json.dumps({
+        "sig": "command not found|python", "count": 5,
+        "first_seen": "2026-06-01", "last_seen": FRESH,
+        "lesson_id": bad.id, "linked_at_count": 2,       # 3 misses post-link
+    }) + "\n", encoding="utf-8")
+
+    res = maybe_consolidate(today=TODAY)
+    assert res is not None and res.weakened_count == 1
+    out = store.load_lessons()[0]
+    assert out.misses == 3 and out.confidence < 0.9
+    # ledger consumed: same misses never decay twice
+    assert observations.load()["command not found|python"]["linked_at_count"] == 5
+
+    (tmp_path / "mem" / ".last-consolidate").unlink()    # force a second pass
+    res2 = maybe_consolidate(today=TODAY)
+    assert res2 is not None and res2.weakened_count == 0  # nothing new → no decay
+
+
+def test_distrusted_lesson_stops_injecting():
+    from portaw.memory.gate import trusted
+
+    popular_wrong = _lesson("popular wrong fix", confidence=0.9, recurrence=10, misses=3)
+    assert not trusted(popular_wrong)                    # misses beat recurrence+confidence
+    scoped_wrong = _lesson("stack wrong fix", applicability="stack:django", misses=3)
+    assert not trusted(scoped_wrong)                     # scope does not shield it
+    pinned_wrong = _lesson("human says keep", misses=10, pinned=True)
+    assert trusted(pinned_wrong)                         # human override wins
+    fresh = _lesson("ok fix", confidence=0.9, misses=2)
+    assert trusted(fresh)                                # below the distrust cap

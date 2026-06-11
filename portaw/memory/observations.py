@@ -142,3 +142,21 @@ def linked_misses(r: dict) -> int:
     """Recurrences observed after the lesson was linked (0 = lesson seems to hold)."""
     linked = r.get("linked_at_count", -1)
     return int(r.get("count", 0)) - linked if linked >= 0 else 0
+
+
+def consume(sigs: list[str]) -> None:
+    """Mark these signatures' misses as fed back into lesson confidence: snapshot
+    linked_at_count = count so the SAME misses never decay a lesson twice. Only
+    NEW recurrences after this point count again. Tolerant — never raises."""
+    if not sigs:
+        return
+    try:
+        with store.locked(_path()):
+            records = load()
+            for sig in sigs:
+                r = records.get(sig)
+                if r and r.get("lesson_id"):
+                    r["linked_at_count"] = int(r.get("count", 0))
+            _save(records)
+    except Exception:
+        pass
