@@ -120,14 +120,15 @@ def capture(
     today: str | None = None,
 ) -> CaptureResult:
     """Signal → lesson → gate → upsert into the global lesson store (dedup+bump)."""
-    from portaw.memory.store import load_lessons, save_lessons, upsert
+    from portaw.memory.store import update_lessons, upsert
 
     today = today or date.today().isoformat()
     entry = to_lesson(signal, project_id, today)
     verdict = accepts(entry, confirmed=confirmed, cfg=gate_cfg)
     if not verdict.ok:
         return CaptureResult(entry=entry, verdict=verdict, stored=False)
-    save_lessons(upsert(load_lessons(), entry, last_seen=today))
+    # under the store lock: concurrent Stop hooks must not drop each other's lesson
+    update_lessons(lambda entries: upsert(entries, entry, last_seen=today))
     return CaptureResult(entry=entry, verdict=verdict, stored=True)
 
 

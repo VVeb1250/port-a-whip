@@ -14,7 +14,10 @@ from __future__ import annotations
 
 import json
 import os
+import time
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Callable, Iterator
 
 from portaw.memory.schema import MemoryEntry
 
@@ -93,6 +96,53 @@ def _replace_with_retry(tmp: Path, path: Path, attempts: int = 3) -> None:
             time.sleep(0.05 * (i + 1))
 
 
+# --- cross-process mutex (read-modify-write spans, not single writes) ---
+
+@contextmanager
+def locked(path: Path, *, timeout: float = 2.0, stale: float = 10.0) -> Iterator[None]:
+    """Best-effort cross-process lock for a read-modify-write on `path`.
+
+    The atomic single-file write below prevents CORRUPTION, but two concurrent
+    hooks (parallel tool calls) doing load→modify→save still lose one writer's
+    update. This O_CREAT|O_EXCL lockfile serializes that span — portable
+    (Windows + POSIX, no msvcrt/fcntl). Best-effort by doctrine: a lock older
+    than `stale` is broken (crashed holder), and on `timeout` we proceed
+    UNLOCKED — a hook must never hang; the worst case is the pre-lock behavior.
+    """
+    lock = path.with_name(path.name + ".lock")
+    acquired = False
+    deadline = time.monotonic() + timeout
+    try:
+        lock.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    while True:
+        try:
+            os.close(os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            acquired = True
+            break
+        except FileExistsError:
+            try:
+                if time.time() - lock.stat().st_mtime > stale:
+                    lock.unlink(missing_ok=True)
+                    continue
+            except OSError:
+                pass
+            if time.monotonic() >= deadline:
+                break  # proceed unlocked — never block a hook
+            time.sleep(0.02)
+        except OSError:
+            break  # unwritable dir etc. → unlocked, tolerant
+    try:
+        yield
+    finally:
+        if acquired:
+            try:
+                lock.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
 # --- lessons (global) ---
 
 def lessons_path() -> Path:
@@ -105,6 +155,18 @@ def load_lessons() -> list[MemoryEntry]:
 
 def save_lessons(entries: list[MemoryEntry]) -> None:
     _write_jsonl(lessons_path(), entries)
+
+
+def update_lessons(
+    mutate: Callable[[list[MemoryEntry]], list[MemoryEntry]],
+) -> list[MemoryEntry]:
+    """load → mutate → save under the store lock (the safe span for concurrent
+    hook writers). Returns what was saved. Use this from hooks; plain load/save
+    stay for read-only callers and human-paced CLI flows."""
+    with locked(lessons_path()):
+        out = mutate(load_lessons())
+        save_lessons(out)
+    return out
 
 
 # --- project ---

@@ -45,10 +45,15 @@ def mark(session_id: str, ids: list[str] | set[str]) -> None:
     if not ids:
         return
     try:
+        from portaw.memory.store import locked
+
         p = _path(session_id)
         p.parent.mkdir(parents=True, exist_ok=True)
-        merged = sorted(seen(session_id) | set(ids))
-        p.write_text(json.dumps({"ids": merged, "ts": time.time()}), encoding="utf-8")
+        # locked: parallel hooks in ONE session merge-write the same log — an
+        # unlocked read-merge-write drops the other surface's mark (→ re-inject).
+        with locked(p):
+            merged = sorted(seen(session_id) | set(ids))
+            p.write_text(json.dumps({"ids": merged, "ts": time.time()}), encoding="utf-8")
         _prune()
     except OSError:
         pass  # a failed mark = at worst one duplicate inject later

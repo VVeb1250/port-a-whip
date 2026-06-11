@@ -21,8 +21,9 @@ def test_from_payload_missing_field_returns_none():
     assert from_payload({}) is None
 
 
-def test_run_capture_hook_stores(monkeypatch):
+def test_run_capture_hook_stores(monkeypatch, tmp_path):
     saved = {}
+    monkeypatch.setattr(store, "global_dir", lambda: tmp_path / "mem")  # lockfile → tmp
     monkeypatch.setattr(store, "load_lessons", lambda: [])
     monkeypatch.setattr(store, "save_lessons", lambda e: saved.update(e=e))
     res = run_capture_hook(_payload(trigger="used python", fix="use py", env=True, confidence=0.8))

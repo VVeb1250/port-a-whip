@@ -96,20 +96,23 @@ def record(command: str, stderr: str, *, lesson_id: str = "",
         if not sig:
             return None
         today = today or date.today().isoformat()
-        records = load()
-        r = records.get(sig)
-        if r is None:
-            r = {"sig": sig, "count": 0, "first_seen": today, "last_seen": today,
-                 "lesson_id": "", "linked_at_count": -1}
-        r["count"] = int(r.get("count", 0)) + 1
-        r["last_seen"] = today
-        # link the first lesson that covers this signature, snapshotting the count so
-        # "did it keep recurring AFTER the lesson existed" is measurable later.
-        if lesson_id and not r.get("lesson_id"):
-            r["lesson_id"] = lesson_id
-            r["linked_at_count"] = r["count"]
-        records[sig] = r
-        _save(records)
+        # under the store lock: parallel tool calls fire parallel PostToolUse hooks —
+        # an unlocked load→save here silently drops the other hook's count.
+        with store.locked(_path()):
+            records = load()
+            r = records.get(sig)
+            if r is None:
+                r = {"sig": sig, "count": 0, "first_seen": today, "last_seen": today,
+                     "lesson_id": "", "linked_at_count": -1}
+            r["count"] = int(r.get("count", 0)) + 1
+            r["last_seen"] = today
+            # link the first lesson that covers this signature, snapshotting the count
+            # so "did it keep recurring AFTER the lesson existed" is measurable later.
+            if lesson_id and not r.get("lesson_id"):
+                r["lesson_id"] = lesson_id
+                r["linked_at_count"] = r["count"]
+            records[sig] = r
+            _save(records)
         return r
     except Exception:
         return None

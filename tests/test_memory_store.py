@@ -75,3 +75,46 @@ def test_write_detail_creates_md(tmp_path):
     p = store.write_detail("abc123", sd, "# full writeup")
     assert p.exists() and p.read_text(encoding="utf-8") == "# full writeup"
     assert p.name == "abc123.md"
+
+
+# --- locked / update_lessons (the concurrent-hook span) ---
+
+def test_locked_acquires_and_cleans_up(tmp_path):
+    target = tmp_path / "x.jsonl"
+    lock = tmp_path / "x.jsonl.lock"
+    with store.locked(target):
+        assert lock.exists()
+    assert not lock.exists()
+
+
+def test_locked_breaks_stale_lock(tmp_path):
+    import os
+    import time
+
+    target = tmp_path / "x.jsonl"
+    lock = tmp_path / "x.jsonl.lock"
+    lock.touch()
+    past = time.time() - 60
+    os.utime(lock, (past, past))  # crashed holder: lock far older than `stale`
+    t0 = time.monotonic()
+    with store.locked(target, timeout=2.0, stale=10.0):
+        pass
+    assert time.monotonic() - t0 < 1.0  # broke the stale lock, no full wait
+
+
+def test_locked_timeout_proceeds_without_deleting_foreign_lock(tmp_path):
+    target = tmp_path / "x.jsonl"
+    lock = tmp_path / "x.jsonl.lock"
+    lock.touch()  # fresh = genuinely held by someone else
+    with store.locked(target, timeout=0.1, stale=60.0):
+        pass  # proceeded unlocked — a hook must never hang
+    assert lock.exists()  # the other holder's lock untouched
+
+
+def test_update_lessons_persists_under_lock(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "global_dir", lambda: tmp_path / "mem")
+    e = _lesson("locked write")
+    out = store.update_lessons(lambda entries: store.upsert(entries, e, last_seen="2026-06-12"))
+    assert [x.body for x in out] == ["locked write"]
+    assert [x.body for x in store.load_lessons()] == ["locked write"]
+    assert not (tmp_path / "mem" / "lessons.jsonl.lock").exists()

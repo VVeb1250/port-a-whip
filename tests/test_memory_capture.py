@@ -99,20 +99,24 @@ def test_to_lesson_builds_compressed_body_and_anchors():
 
 # --- capture (store isolated) ---
 
-def test_capture_stores_accepted_lesson(monkeypatch):
-    saved = {}
+def _isolate(monkeypatch, tmp_path, saved):
+    monkeypatch.setattr(store, "global_dir", lambda: tmp_path / "mem")  # lockfile → tmp
     monkeypatch.setattr(store, "load_lessons", lambda: [])
     monkeypatch.setattr(store, "save_lessons", lambda entries: saved.update(e=entries))
+
+
+def test_capture_stores_accepted_lesson(monkeypatch, tmp_path):
+    saved = {}
+    _isolate(monkeypatch, tmp_path, saved)
     sig = FailureSignal(trigger="used python", fix="use py", env_level=True, confidence=0.8)
     res = capture(sig, "paw", today=TODAY)
     assert res.stored and res.verdict.ok
     assert saved["e"][0].body == "used python → use py"
 
 
-def test_capture_stores_weak_universal_so_it_can_recur(monkeypatch):
+def test_capture_stores_weak_universal_so_it_can_recur(monkeypatch, tmp_path):
     saved = {}
-    monkeypatch.setattr(store, "load_lessons", lambda: [])
-    monkeypatch.setattr(store, "save_lessons", lambda entries: saved.update(e=entries))
+    _isolate(monkeypatch, tmp_path, saved)
     sig = FailureSignal(trigger="used python", fix="use py", env_level=True, confidence=0.4)
     res = capture(sig, "paw", today=TODAY)
     # stored (so recurrence can accumulate) but not yet trusted for injection
