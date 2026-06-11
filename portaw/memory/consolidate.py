@@ -103,3 +103,39 @@ def consolidate(
     # sort by activation ONLY (never compare the entry — see [sweep-tuple-sort])
     kept.sort(key=lambda e: activation(e, today, cfg.activation_cfg), reverse=True)
     return ConsolidationResult(kept, archived, merged_count, promoted_count)
+
+
+# --- opportunistic trigger (the "async" in the async dream pass) ---
+
+_MARKER = ".last-consolidate"
+AUTO_INTERVAL_DAYS = 7
+
+
+def maybe_consolidate(
+    *, interval_days: int = AUTO_INTERVAL_DAYS, today: date | None = None,
+) -> ConsolidationResult | None:
+    """Run the dream pass at most once per `interval_days` — the SessionStart hook
+    calls this so the store actually gets consolidated (decay/archive never fired
+    when the pass was manual-only). Marker-file mtime = last run. None = skipped
+    or failed (a hook trigger must never raise)."""
+    import time
+
+    from portaw.memory import store
+
+    try:
+        marker = store.global_dir() / _MARKER
+        try:
+            if time.time() - marker.stat().st_mtime < interval_days * 86400:
+                return None
+        except OSError:
+            pass  # no marker yet → first run
+        with store.locked(store.lessons_path()):
+            res = consolidate(store.load_lessons(), today=today)
+            # archive FIRST (crash between the writes = duplicate, never loss)
+            store.append_archive(res.archived)
+            store.save_lessons(res.kept)
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+        return res
+    except Exception:
+        return None

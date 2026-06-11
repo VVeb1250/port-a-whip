@@ -2,9 +2,11 @@
 
 from datetime import date
 
+from portaw.memory import store
 from portaw.memory.consolidate import (
     ConsolidationConfig,
     consolidate,
+    maybe_consolidate,
     merge_duplicates,
     promote,
 )
@@ -66,3 +68,36 @@ def test_consolidate_kept_sorted_by_activation_desc():
     lo = _lesson("lo", recurrence=1, last_seen=FRESH)
     res = consolidate([lo, hi], today=TODAY)
     assert res.kept[0].body == "hi"
+
+
+# --- maybe_consolidate (the SessionStart opportunistic trigger) ---
+
+def test_maybe_consolidate_runs_once_then_respects_marker(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "global_dir", lambda: tmp_path / "mem")
+    store.save_lessons([_lesson("keep me", recurrence=5)])
+
+    res = maybe_consolidate(today=TODAY)
+    assert res is not None and [e.body for e in res.kept] == ["keep me"]
+    assert (tmp_path / "mem" / ".last-consolidate").exists()
+    assert maybe_consolidate(today=TODAY) is None  # within interval → skip
+
+
+def test_maybe_consolidate_archives_stale_to_archive_store(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "global_dir", lambda: tmp_path / "mem")
+    store.save_lessons([
+        _lesson("stale never-proven", last_seen=OLD, recurrence=1, confidence=0.5),
+        _lesson("fresh", recurrence=5),
+    ])
+    res = maybe_consolidate(today=TODAY)
+    assert res is not None and [e.body for e in res.archived] == ["stale never-proven"]
+    assert [e.body for e in store.load_lessons()] == ["fresh"]
+    archived = store._read_jsonl(store.archive_path())
+    assert [e.body for e in archived] == ["stale never-proven"]
+
+
+def test_maybe_consolidate_never_raises(monkeypatch):
+    def boom():
+        raise OSError("nope")
+
+    monkeypatch.setattr(store, "global_dir", boom)
+    assert maybe_consolidate(today=TODAY) is None

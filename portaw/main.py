@@ -689,13 +689,23 @@ def memory_capture_hook(host: str):
 
 @memory.command("session-hook")
 def memory_session_hook():
-    """SessionStart entrypoint: inject pinned lessons once per session. Never fails."""
+    """SessionStart entrypoint: inject pinned lessons once per session. Never fails.
+
+    Also the opportunistic consolidation trigger: session boundaries are the
+    'between sessions' the dream pass is designed for, and this hook is the only
+    paw code guaranteed to run there. Rate-limited by a marker file (~weekly)."""
     try:
         from portaw.adapters.memory_hooks import run_session_hook
 
         out = run_session_hook()
         if out:
             click.echo(out)
+    except Exception:
+        pass
+    try:
+        from portaw.memory.consolidate import maybe_consolidate
+
+        maybe_consolidate()
     except Exception:
         pass
     raise SystemExit(0)
