@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from portaw.config import HostConfig
 import portaw.sets.install as install_mod
+from portaw.config import HostConfig
 
 
 @pytest.fixture

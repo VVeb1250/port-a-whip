@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import hashlib
 import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from portaw.kernel.ranking import Capability
 

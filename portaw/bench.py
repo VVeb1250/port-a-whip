@@ -53,7 +53,7 @@ class Session:
     tokens: dict[str, int]  # _TOKEN_KEYS → count
 
     @classmethod
-    def from_raw(cls, raw: dict) -> "Session":
+    def from_raw(cls, raw: dict) -> Session:
         return cls(
             period=str(raw.get("period", "")),
             agent=str(raw.get("agent", "")),

@@ -7,7 +7,7 @@ everywhere (deterministic, no model); (2) the real ONNX path is tested only when
 import pytest
 
 from portaw.kernel import embed
-from portaw.kernel.ranking import Capability, RouteConfig, route
+from portaw.kernel.ranking import Capability, route
 
 _CAPS = [
     Capability(name="secure-agent", text="secret leak credential scan permissions", ctype="set"),
@@ -81,7 +81,7 @@ def test_encode_raises_when_unavailable(tmp_path):
     # encode() does NOT swallow failures — the caller owns the fallback
     # (skill-router → inline ONNX, route() → TF-IDF floor). Missing model/libs
     # at a bogus dir must raise, never silently return [].
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017 — ANY raise is the contract here
         embed.encode(["x"], md=tmp_path / "no-model")
 
 

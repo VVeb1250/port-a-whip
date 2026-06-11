@@ -81,7 +81,7 @@ def to_lesson(signal: FailureSignal, project_id: str,
     )
 
 
-def from_payload(payload: dict) -> "FailureSignal | None":
+def from_payload(payload: dict) -> FailureSignal | None:
     """Extract a signal from a host Stop-event payload (cross-host contract, §8).
 
     Hosts emit a structured ``paw_lesson`` field — the same shape on CC, Codex and

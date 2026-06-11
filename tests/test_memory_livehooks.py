@@ -237,6 +237,7 @@ def test_enable_inject_tool_writes_matcher(tmp_path, monkeypatch):
 
 def test_enable_inject_rejects_non_cc_host():
     import pytest
+
     from portaw.memory.hookwire import enable_inject
 
     with pytest.raises(ValueError):

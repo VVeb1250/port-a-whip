@@ -1,9 +1,9 @@
 """Patcher tests — pure merges + file round-trips on tmp paths (never real config)."""
 
 import json
+import tomllib
 
 import pytest
-import tomllib
 
 from portaw.config import HostConfig
 from portaw.sets.patcher import (

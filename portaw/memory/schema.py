@@ -24,7 +24,7 @@ def _norm(text: str) -> str:
 
 def make_id(etype: str, body: str) -> str:
     """Stable short content-hash id. Same (type, normalized-body) → same id."""
-    h = hashlib.sha1(f"{etype}:{_norm(body)}".encode("utf-8")).hexdigest()
+    h = hashlib.sha1(f"{etype}:{_norm(body)}".encode()).hexdigest()
     return h[:12]
 
 
@@ -46,7 +46,7 @@ class Anchors:
         return not (self.codegraph_nodes or self.symbols or self.paths)
 
     @classmethod
-    def from_raw(cls, raw: dict | None) -> "Anchors":
+    def from_raw(cls, raw: dict | None) -> Anchors:
         raw = raw or {}
         return cls(
             codegraph_nodes=tuple(raw.get("codegraph_nodes", [])),
@@ -88,7 +88,7 @@ class MemoryEntry:
             [self.body, " ".join(self.trigger_terms), " ".join(self.anchors.symbols)]
         ).strip()
 
-    def bumped(self, *, last_seen: str) -> "MemoryEntry":
+    def bumped(self, *, last_seen: str) -> MemoryEntry:
         """Return a copy with recurrence+1, refreshed last_seen, and confidence
         reinforced (a confirmed recurrence is evidence the lesson is real — see
         confidence.py; saturating, so repeated hits never assert certainty)."""
@@ -98,12 +98,12 @@ class MemoryEntry:
                        confidence=reinforced(self.confidence))
 
     @classmethod
-    def new(cls, etype: str, body: str, scope: str, **kw) -> "MemoryEntry":
+    def new(cls, etype: str, body: str, scope: str, **kw) -> MemoryEntry:
         """Build with a derived content-hash id (the normal construction path)."""
         return cls(id=make_id(etype, body), type=etype, body=body, scope=scope, **kw)
 
     @classmethod
-    def from_raw(cls, raw: dict) -> "MemoryEntry":
+    def from_raw(cls, raw: dict) -> MemoryEntry:
         return cls(
             id=raw["id"],
             type=raw["type"],

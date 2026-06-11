@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import Callable
 
 _TOKEN_RE = re.compile(r"[a-z0-9]{3,}")
 
@@ -89,7 +89,7 @@ def _tfidf(prompt: str, caps: list[Capability], cfg: RouteConfig) -> dict[str, H
     scored: dict[str, Hit] = {}
     if not qv:
         return scored
-    for cap, d in zip(caps, docs):
+    for cap, d in zip(caps, docs, strict=True):
         dv, dn = vec(d)
         dot = sum(qv[t] * dv.get(t, 0) for t in qv)
         cos = dot / (qn * dn)

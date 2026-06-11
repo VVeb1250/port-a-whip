@@ -7,7 +7,6 @@ harvest reword-twin duplicate.
 """
 
 from datetime import date
-from pathlib import Path
 
 from click.testing import CliRunner
 
@@ -16,7 +15,7 @@ from portaw.kernel import embed
 from portaw.kernel.ranking import Capability
 from portaw.main import cli
 from portaw.memory.anchors import AnchorQuery, overlap
-from portaw.memory.consolidate import ConsolidationConfig, consolidate
+from portaw.memory.consolidate import consolidate
 from portaw.memory.inject import InjectConfig, select
 from portaw.memory.retrieval import Scored, recall
 from portaw.memory.schema import Anchors, MemoryEntry

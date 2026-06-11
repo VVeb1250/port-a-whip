@@ -23,7 +23,7 @@ import json
 import sys
 import tomllib
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import tomlkit
@@ -184,7 +184,7 @@ def run_hook(stdin_text: str | None = None, host: HostId = "claude-code") -> str
 # ----------------------------------------------------------------- file helpers
 
 def _backup(path: Path) -> Path:
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     bak = path.with_name(path.name + f".paw-bak-{ts}")
     bak.write_bytes(path.read_bytes())
     return bak

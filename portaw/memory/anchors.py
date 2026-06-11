@@ -23,7 +23,7 @@ class AnchorQuery:
     @classmethod
     def from_context(
         cls, paths: list[str] | None = None, symbols: list[str] | None = None
-    ) -> "AnchorQuery":
+    ) -> AnchorQuery:
         return cls(paths=tuple(paths or ()), symbols=tuple(symbols or ()))
 
     def as_text(self) -> str:

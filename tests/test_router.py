@@ -7,7 +7,6 @@ import pytest
 import portaw.adapters.router as r
 from portaw.kernel.registry import build_capabilities, build_intent_map
 
-
 # ---- registry ----
 
 def test_registry_builds_one_capability_per_set():

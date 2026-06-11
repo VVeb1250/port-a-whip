@@ -33,7 +33,7 @@ def sets_list():
     try:
         all_sets = load_all()
     except SetsError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
     for s in all_sets:
         click.echo(f"  {s.name:<18} mcp={s.mcp_count} non_mcp={len(s.non_mcp)}  — {s.description[:70]}")
 
@@ -47,7 +47,7 @@ def sets_show(set_name: str):
     try:
         s = get_set(set_name)
     except SetsError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
     click.echo(f"{s.name}  (mcp={s.mcp_count}, non_mcp={len(s.non_mcp)})")
     click.echo(s.description)
     if s.trigger_terms:
@@ -106,7 +106,7 @@ def install(set_name: str, host: str | None, force: bool):
     try:
         res = install_set(set_name, host, force=force)
     except (SetsError, PatchError, ValueError) as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
 
     click.echo(f"install '{res.set_name}' → host {res.host}")
     for tool, backup in res.patched:
@@ -134,7 +134,7 @@ def remove(set_name: str, host: str | None):
     try:
         res = remove_set(set_name, host)
     except (SetsError, ValueError) as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
     click.echo(f"remove '{res.set_name}' → host {res.host}")
     for tool, backup in res.removed:
         b = f" (backup {backup.name})" if backup else ""
@@ -163,7 +163,7 @@ def verify(set_name: str, host: str | None):
             hid = resolve_host(host)
         h = check_set(set_name, hid)  # type: ignore[arg-type]
     except (SetsError, ValueError) as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
     mark = {"ok": "✓", "missing": "✗", "config-only": "·", "alt": "↷"}
     for t in h.tools:
         click.echo(f"  {mark[t.status]} {t.tool} ({t.kind}): {t.status} — {t.detail}")
@@ -217,7 +217,7 @@ def bench_list(agent: str | None, limit: int):
     try:
         sessions = load_sessions(agent)  # type: ignore[arg-type]
     except CcusageError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
     sessions.sort(key=lambda s: s.last_activity, reverse=True)
     click.echo(f"{'session':<10}{'date':<12}{'agent':<8}{'totalTokens':>14}{'cost':>10}")
     for s in sessions[:limit]:
@@ -243,7 +243,7 @@ def bench_ab(baseline_id: str, treated_id: str, agent: str | None, as_json: bool
         base = find_session(sessions, baseline_id)
         treat = find_session(sessions, treated_id)
     except CcusageError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
     d = diff(base, treat)
     click.echo(_json.dumps(d, indent=2) if as_json else format_report(d))
 
@@ -304,7 +304,7 @@ def router_enable(host: str | None, command: str | None):
         hid = resolve_host(host) if host is None else host  # type: ignore[arg-type]
         changed, backup = enable(hid, command=command)  # type: ignore[arg-type]
     except ValueError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
     cmd = command if command is not None else default_command(hid)  # type: ignore[arg-type]
     if not changed:
         click.echo(f"router already wired on {hid}")
@@ -325,7 +325,7 @@ def router_disable(host: str | None):
         hid = resolve_host(host) if host is None else host  # type: ignore[arg-type]
         removed = disable(hid)  # type: ignore[arg-type]
     except ValueError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
     click.echo(f"router {'disabled' if removed else 'was not wired'} on {hid}")
 
 
@@ -340,7 +340,7 @@ def router_status(host: str | None):
         hid = resolve_host(host) if host is None else host  # type: ignore[arg-type]
         st = status(hid)  # type: ignore[arg-type]
     except ValueError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
     click.echo(f"host={st['host']} event={st['event']} wired={st['wired']} settings={st['settings']}")
 
 
@@ -438,6 +438,7 @@ def memory_add(body, etype, scope, applicability, triggers, symbols, paths, pin,
     (gate.accepts: project writes need explicit confirmation — a deliberate
     `memory add --type project` satisfies it by construction)."""
     from datetime import date
+    from pathlib import Path
 
     from portaw.memory.anchors import Anchors
     from portaw.memory.schema import MemoryEntry
@@ -448,8 +449,6 @@ def memory_add(body, etype, scope, applicability, triggers, symbols, paths, pin,
         save_project,
         upsert,
     )
-
-    from pathlib import Path
 
     if etype == "project" and applicability is not None:
         # refuse rather than silently override — the flag would be a no-op lie
@@ -631,7 +630,7 @@ def memory_enable(host: str | None):
         hid = resolve_host(host) if host is None else host  # type: ignore[arg-type]
         changed, backup = enable_capture(hid)  # type: ignore[arg-type]
     except ValueError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
     if not changed:
         click.echo(f"capture hook already wired on {hid}")
     else:
@@ -651,7 +650,7 @@ def memory_disable(host: str | None):
         hid = resolve_host(host) if host is None else host  # type: ignore[arg-type]
         removed = disable_capture(hid)  # type: ignore[arg-type]
     except ValueError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
     click.echo(f"capture hook {'disabled' if removed else 'was not wired'} on {hid}")
 
 
@@ -666,7 +665,7 @@ def memory_status(host: str | None):
         hid = resolve_host(host) if host is None else host  # type: ignore[arg-type]
         st = capture_status(hid)  # type: ignore[arg-type]
     except ValueError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
     click.echo(f"host={st['host']} event={st['event']} wired={st['wired']} settings={st['settings']}")
 
 
@@ -737,7 +736,7 @@ def memory_inject_enable(surface: str, host: str):
         try:
             changed, backup = enable_inject(name, host)  # type: ignore[arg-type]
         except ValueError as e:
-            raise click.ClickException(str(e))
+            raise click.ClickException(str(e)) from e
         if changed:
             b = f" (backup {backup.name})" if backup else ""
             click.echo(f"inject '{name}' enabled on {host}{b} — takes effect next session")
@@ -757,7 +756,7 @@ def memory_inject_disable(surface: str, host: str):
         try:
             removed = disable_inject(name, host)  # type: ignore[arg-type]
         except ValueError as e:
-            raise click.ClickException(str(e))
+            raise click.ClickException(str(e)) from e
         click.echo(f"inject '{name}' {'disabled' if removed else 'was not wired'} on {host}")
 
 
@@ -791,10 +790,11 @@ def memory_consolidate(dry_run: bool):
 @click.option("--adr-dir", default=None, help="ADR dir (default: docs/adr).")
 def memory_init(confirm: bool, adr_dir: str | None):
     """Seed project-memory: harvest docs/adr/* (v1). Preview unless --confirm."""
+    from datetime import date
+
     from portaw.memory.gate import accepts
     from portaw.memory.seed import default_adr_dir, harvest_adrs
     from portaw.memory.store import load_project, save_project, upsert
-    from datetime import date
 
     d = adr_dir or default_adr_dir()
     harvested = harvest_adrs(d)

@@ -11,9 +11,9 @@ supplies the entries, the caller supplies prompt + edit-target.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
-from typing import Callable
 
 from portaw.kernel.ranking import Capability, RouteConfig, route
 from portaw.memory.anchors import AnchorQuery, overlap

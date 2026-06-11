@@ -51,7 +51,7 @@ class CuratedSet:
         return len(self.mcp)
 
     @classmethod
-    def from_raw(cls, raw: dict) -> "CuratedSet":
+    def from_raw(cls, raw: dict) -> CuratedSet:
         return cls(
             name=raw["set_name"],
             description=raw.get("description", ""),

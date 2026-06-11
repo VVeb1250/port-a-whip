@@ -15,9 +15,9 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Iterator
 
 from portaw.memory.schema import MemoryEntry
 
@@ -90,9 +90,9 @@ def _replace_with_retry(tmp: Path, path: Path, attempts: int = 3) -> None:
         try:
             os.replace(tmp, path)
             return
-        except PermissionError:
+        except PermissionError as e:
             if i == attempts - 1:
-                raise MemoryStoreError(f"store busy, could not replace {path}")
+                raise MemoryStoreError(f"store busy, could not replace {path}") from e
             time.sleep(0.05 * (i + 1))
 
 

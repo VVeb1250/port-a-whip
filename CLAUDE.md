@@ -68,13 +68,12 @@ Live design rules:
 ```
 port-a-whip/
 ├── portaw/                # package; CLI command = `portaw`
-│   ├── main.py            # Click CLI
-│   ├── sets/              # L1: loader.py, patcher.py (json/toml, 0 dep), shim.py
+│   ├── main.py            # Click CLI — ALL command groups live here (lazy imports per command; no commands/ split)
+│   ├── sets/              # L1: loader.py, patcher.py (json/toml, 0 dep), install.py, healthcheck.py
 │   ├── kernel/            # L2-3 portable: ranking.py (TF-IDF+embed), registry.py, embed.py
 │   ├── memory/            # L3: schema/store/retrieval/capture/harvest/detect/consolidate
-│   ├── adapters/          # per-host inject: base, claude_code, codex (TOML), gemini, router
-│   ├── config.py          # detect host; locate+parse config (json/toml)
-│   └── commands/
+│   ├── adapters/          # per-host inject: router.py (CC/codex/gemini wiring), memory_hooks.py
+│   └── config.py          # detect host; locate+parse config (json/toml)
 ├── registry/sets.json     # curated sets (NOT per-tool registry)
 ├── integration/skill-router.py  # live CC hook bridge (kernel-unify + paw_block inject)
 ├── tests/  pyproject.toml  CLAUDE.md  port-a-whip-spec.md

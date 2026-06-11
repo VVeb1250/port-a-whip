@@ -5,7 +5,6 @@ The 2026-06-11 `memory pin` insert silently swallowed `@memory.command("capture"
 REGISTRATION (cheap, catches any future decorator-eating edit) and the pin/rm flows.
 """
 
-import json
 
 from click.testing import CliRunner
 

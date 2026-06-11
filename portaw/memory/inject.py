@@ -71,7 +71,7 @@ def select(scored: list[Scored], cfg: InjectConfig | None = None) -> list[Scored
 def session_select(
     entries: list[MemoryEntry],
     *,
-    ctx: "RetrievalContext | None" = None,
+    ctx: RetrievalContext | None = None,
     max_tokens: int = 300,
     max_items: int = 8,
 ) -> list[MemoryEntry]:

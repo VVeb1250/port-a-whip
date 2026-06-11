@@ -146,7 +146,7 @@ def test_reinforced_saturates_upward():
     c = 0.7
     seq = [c := confidence.reinforced(c) for _ in range(3)]
     assert seq[0] > 0.7 and seq[-1] < confidence.CEILING
-    assert all(b > a for a, b in zip([0.7, *seq], seq))      # monotonic up
+    assert all(b > a for a, b in zip([0.7, *seq], seq, strict=False))  # monotonic up
     # MED 0.70 crosses the 0.75 trusted bar within ~2 confirmed recurrences
     assert confidence.reinforced(confidence.reinforced(0.7)) > 0.75
 
