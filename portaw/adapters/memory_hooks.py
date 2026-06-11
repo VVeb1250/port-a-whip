@@ -25,9 +25,13 @@ import sys
 
 # stderr markers that say "this Bash call actually FAILED" (tool_response carries
 # no exit code on every host) — precision gate so warnings alone never trigger.
+# Boundaries matter: bare `ERROR` matched inside "0 ERRORS" and `cannot ` matched
+# any prose ("cannot guarantee…") — output that merely TALKS about errors must
+# not fire a failure recall.
 _FAIL_RE = re.compile(
     r"command not found|not recognized|No such file|Traceback|"
-    r"fatal:|error:|Error:|ERROR|denied|cannot ", re.ASCII
+    r"fatal:|error:|Error:|\bERROR\b|\bdenied\b|cannot (?:find|access|open|stat)",
+    re.ASCII,
 )
 _EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 _MAX_ERR_CHARS = 800  # route on the error's head — tails are stack-frame noise

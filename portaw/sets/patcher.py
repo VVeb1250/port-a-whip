@@ -153,10 +153,15 @@ def _guard_unchanged(path: Path, before: int | None) -> None:
 def is_installed(hc: HostConfig, name: str) -> bool:
     """Is server `name` already present in this host's config?"""
     text = _read(hc.path)
-    if hc.fmt == "json":
-        config = json.loads(text) if text.strip() else {}
-        return has_json(config, hc.servers_key, name)
-    return has_toml(text, name)
+    try:
+        if hc.fmt == "json":
+            config = json.loads(text) if text.strip() else {}
+            return has_json(config, hc.servers_key, name)
+        return has_toml(text, name)
+    except (json.JSONDecodeError, tomlkit.exceptions.ParseError) as e:
+        # name the file — a bare JSONDecodeError reads like a paw bug, not a
+        # corrupt host config the user can act on
+        raise PatchError(f"existing {hc.path} is not valid {hc.fmt}: {e}") from e
 
 
 def patch_host(hc: HostConfig, name: str, entry: dict) -> Path | None:

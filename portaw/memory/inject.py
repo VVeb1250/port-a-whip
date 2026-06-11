@@ -87,11 +87,13 @@ def session_select(
     out: list[MemoryEntry] = []
     budget = max_tokens
     for e in entries:
+        if len(out) >= max_items:
+            break
         if not e.pinned or not is_eligible(e, ctx):
             continue
         cost = approx_tokens(e.body)
-        if cost > budget or len(out) >= max_items:
-            continue
+        if cost > budget:
+            continue  # this one doesn't fit — a cheaper later pin still may
         out.append(e)
         budget -= cost
     return out

@@ -118,6 +118,22 @@ def test_tool_hook_bash_plain_warning_is_silent(tmp_path, monkeypatch):
     assert run_tool_hook(_bash_payload("python will be slow today")) is None
 
 
+def test_tool_hook_output_about_errors_is_silent(tmp_path, monkeypatch):
+    """Output that TALKS about errors is not a failure: '0 ERRORS' summaries and
+    'cannot guarantee' prose used to fire the old broad markers."""
+    _wire(monkeypatch, tmp_path,
+          [_lesson("use py not python on windows", trigger_terms=("python",))])
+    assert run_tool_hook(_bash_payload("python lint passed: found 0 ERRORS")) is None
+    assert run_tool_hook(_bash_payload("python cannot guarantee ordering here")) is None
+
+
+def test_tool_hook_permission_denied_still_fires(tmp_path, monkeypatch):
+    _wire(monkeypatch, tmp_path,
+          [_lesson("use py not python on windows", trigger_terms=("python",))])
+    out = run_tool_hook(_bash_payload("python: Permission denied", sid="tperm"))
+    assert out is not None
+
+
 def test_tool_hook_dedups_within_session(tmp_path, monkeypatch):
     _wire(monkeypatch, tmp_path,
           [_lesson("use py not python on windows", trigger_terms=("python",))])
