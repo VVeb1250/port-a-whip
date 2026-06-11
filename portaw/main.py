@@ -827,6 +827,30 @@ def memory_init(confirm: bool, adr_dir: str | None):
     click.echo(f"wrote {len(harvested)} entries to project-memory.")
 
 
+@memory.command("sync")
+@click.option("--init", "remote_url", default=None, metavar="REMOTE_URL",
+              help="One-time setup: make ~/.paw/memory a git repo against this "
+                   "remote (use a PRIVATE repo — lessons can reference your env).")
+def memory_sync(remote_url: str | None):
+    """Cross-host lesson sync (git-backed, no daemon).
+
+    Content-hash ids make the merge conflict-free: the same mistake captured on
+    two machines is the same id; counts fold field-wise (idempotent). Imported
+    lessons arrive confidence-capped until they recur locally."""
+    from portaw.memory.sync import SyncError, init_sync, sync
+
+    try:
+        if remote_url:
+            click.echo(init_sync(remote_url))
+            return
+        res = sync()
+        click.echo(f"sync: {res.message}")
+        if not res.pushed:
+            raise SystemExit(1)
+    except SyncError as e:
+        raise click.ClickException(str(e)) from e
+
+
 @memory.command("harvest")
 @click.option("--file", "src", default=None,
               help="mistakes-index.md (default: ~/.claude/rules/mistakes-index.md).")
