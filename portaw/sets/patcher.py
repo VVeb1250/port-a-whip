@@ -150,6 +150,25 @@ def _guard_unchanged(path: Path, before: int | None) -> None:
         )
 
 
+def get_entry(hc: HostConfig, name: str) -> dict | None:
+    """The live config entry for server `name` (None when absent) — the read side
+    of drift detection: state.py compares this against what paw wrote."""
+    text = _read(hc.path)
+    if not text.strip():
+        return None
+    try:
+        if hc.fmt == "json":
+            node: object = json.loads(text)
+            for k in hc.servers_key:
+                node = node.get(k, {}) if isinstance(node, dict) else {}
+            entry = node.get(name) if isinstance(node, dict) else None
+        else:
+            entry = tomllib.loads(text).get("mcp_servers", {}).get(name)
+    except (json.JSONDecodeError, tomllib.TOMLDecodeError) as e:
+        raise PatchError(f"existing {hc.path} is not valid {hc.fmt}: {e}") from e
+    return dict(entry) if isinstance(entry, dict) else None
+
+
 def is_installed(hc: HostConfig, name: str) -> bool:
     """Is server `name` already present in this host's config?"""
     text = _read(hc.path)

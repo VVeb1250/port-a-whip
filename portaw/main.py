@@ -174,10 +174,12 @@ def verify(set_name: str, host: str | None):
 
 @cli.command()
 def doctor():
-    """Env check + host detect + host-config parse-validity."""
+    """Env check + host detect + config parse-validity + paw-managed drift report."""
     import json as _json
 
     from portaw.config import host_config
+    from portaw.sets import state as state_mod
+    from portaw.sets.patcher import get_entry
 
     hosts = detect_hosts()
     click.echo(f"detected hosts: {', '.join(hosts) if hosts else 'none'}")
@@ -194,6 +196,15 @@ def doctor():
             click.echo(f"  ✓ {h}: {hc.path} parses ({hc.fmt})")
         except Exception as e:  # report, don't crash
             click.echo(f"  ✗ {h}: {hc.path} INVALID {hc.fmt} — {e}")
+            continue
+        managed = state_mod.installed_sets(h)
+        if managed:
+            summary = ", ".join(
+                f"{s} ({len(r.get('tools', {}))} mcp)" for s, r in sorted(managed.items()))
+            click.echo(f"    paw-managed: {summary}")
+            mark = {"orphaned": "✗", "drift": "≠", "unreadable": "?"}
+            for tool, kind, detail in state_mod.check_drift(h, lambda t, _hc=hc: get_entry(_hc, t)):
+                click.echo(f"    {mark.get(kind, '?')} {tool} [{kind}]: {detail}")
     try:
         from portaw.sets.loader import load_all
 

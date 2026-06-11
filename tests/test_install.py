@@ -5,7 +5,14 @@ import json
 import pytest
 
 import portaw.sets.install as install_mod
+import portaw.sets.state as state_mod
 from portaw.config import HostConfig
+
+
+@pytest.fixture(autouse=True)
+def tmp_state(tmp_path, monkeypatch):
+    """Every test gets an isolated state.json — never the real ~/.paw ledger."""
+    monkeypatch.setattr(state_mod, "state_path", lambda: tmp_path / "state.json")
 
 
 @pytest.fixture
@@ -109,3 +116,54 @@ def test_remove_skips_tool_anchored_to_other_host(tmp_host):
 def test_resolve_host_rejects_unknown():
     with pytest.raises(ValueError, match="unknown host"):
         install_mod.resolve_host("emacs")
+
+
+# --- install-state ledger + drift detection (#2) ---
+
+def test_install_records_state_and_remove_clears_it(tmp_host):
+    install_mod.install_set("context-quality", "claude-code")
+    managed = state_mod.managed_tools("claude-code")
+    assert "context7" in managed
+    assert managed["context7"]["set"] == "context-quality"
+    assert managed["context7"]["entry"]["command"] == "npx"
+
+    install_mod.remove_set("context-quality", "claude-code")
+    assert state_mod.managed_tools("claude-code") == {}
+    assert state_mod.installed_sets("claude-code") == {}
+
+
+def test_skipped_already_present_does_not_claim_ownership(tmp_host):
+    """A server the USER already had must not enter paw's ledger."""
+    tmp_host.path.write_text(json.dumps({"mcpServers": {"context7": {"command": "user-own"}}}))
+    res = install_mod.install_set("context-quality", "claude-code")
+    assert res.skipped == ["context7"]
+    assert state_mod.managed_tools("claude-code") == {}
+
+
+def test_check_drift_reports_orphan_and_drift(tmp_host):
+    from portaw.sets.patcher import get_entry
+
+    install_mod.install_set("context-quality", "claude-code")
+    live = lambda t: get_entry(tmp_host, t)  # noqa: E731
+    assert state_mod.check_drift("claude-code", live) == []  # fresh install = clean
+
+    # user tunes the entry outside paw → drift
+    data = json.loads(tmp_host.path.read_text())
+    data["mcpServers"]["context7"]["env"] = {"TUNED": "1"}
+    tmp_host.path.write_text(json.dumps(data))
+    findings = state_mod.check_drift("claude-code", live)
+    assert [(t, k) for t, k, _ in findings] == [("context7", "drift")]
+
+    # user deletes the entry outside paw → orphaned record
+    data["mcpServers"].pop("context7")
+    tmp_host.path.write_text(json.dumps(data))
+    findings = state_mod.check_drift("claude-code", live)
+    assert [(t, k) for t, k, _ in findings] == [("context7", "orphaned")]
+
+
+def test_state_load_tolerates_garbage(tmp_path, monkeypatch):
+    monkeypatch.setattr(state_mod, "state_path", lambda: tmp_path / "garbage.json")
+    (tmp_path / "garbage.json").write_text("{ not json", encoding="utf-8")
+    assert state_mod.load_state() == {}
+    state_mod.record_install("claude-code", "s", {"t": {"command": "c"}})  # recovers
+    assert "t" in state_mod.managed_tools("claude-code")

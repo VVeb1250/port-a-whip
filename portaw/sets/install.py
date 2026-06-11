@@ -123,6 +123,7 @@ def install_set(set_name: str, host: str | None, force: bool = False) -> Install
     hc = host_config(hid)
     res = InstallResult(set_name=cs.name, host=hid)
 
+    written: dict[str, dict] = {}
     for m in cs.mcp:
         name = m["tool"]
         if not _for_host(m, hid):  # host-conditional: belongs to another host's stack
@@ -131,9 +132,15 @@ def install_set(set_name: str, host: str | None, force: bool = False) -> Install
         if is_installed(hc, name) and not force:
             res.skipped.append(name)
             continue
-        backup = patch_host(hc, name, build_entry(m))
+        entry = build_entry(m)
+        backup = patch_host(hc, name, entry)
         res.patched.append((name, backup))
+        written[name] = entry
 
+    if written:
+        from portaw.sets import state
+
+        state.record_install(hid, cs.name, written)
     res.shim_steps = _gather_shim(cs, hid)
     res.mcp_count_after = _count_active_mcp(hc)
     if res.mcp_count_after > _CEILING:
@@ -159,6 +166,10 @@ def remove_set(set_name: str, host: str | None) -> RemoveResult:
         if is_installed(hc, name):
             backup = unpatch_host(hc, name)
             res.removed.append((name, backup))
+    if res.removed:
+        from portaw.sets import state
+
+        state.record_remove(hid, cs.name, [t for t, _ in res.removed])
     # non-MCP / shim removal is manual (we didn't auto-run installs).
     res.reverse_shim = _gather_shim(cs, hid)
     return res
