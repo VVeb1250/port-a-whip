@@ -109,6 +109,28 @@ def format_context(hits: list[Hit], installed: dict[str, list[str]] | None = Non
     return "\n".join(lines)
 
 
+def _drop_demoted(hits: list[Hit]) -> list[Hit]:
+    """Outcome loop (read side): a set suggested ≥5 times that NEVER converted is
+    noise — stop surfacing it until evidence changes (`portaw router outcomes`)."""
+    try:
+        from portaw.memory import outcomes
+
+        demoted = outcomes.demoted_names()
+        return [h for h in hits if h.cap.name not in demoted] if demoted else hits
+    except Exception:
+        return hits
+
+
+def _record_suggested(hits: list[Hit]) -> None:
+    """Outcome loop (write side): count what was actually emitted."""
+    try:
+        from portaw.memory import outcomes
+
+        outcomes.mark_suggested([h.cap.name for h in hits if h.cap.ctype == "set"])
+    except Exception:
+        pass
+
+
 def _dedup_hits(hits: list[Hit], session_id: str) -> list[Hit]:
     """A set suggested once in this session never re-suggests (context rot) —
     same dedup log L3 uses, ids namespaced with `set:` so they never collide
@@ -178,7 +200,9 @@ def paw_block(prompt: str, cwd: str | None = None, session_id: str = "") -> str:
     try:
         if len((prompt or "").strip()) < _MIN_PROMPT_LEN:
             return ""
-        hits = _dedup_hits(route_prompt(prompt), session_id)
+        hits = _dedup_hits(_drop_demoted(route_prompt(prompt)), session_id)
+        if hits:
+            _record_suggested(hits)
         blocks = [b for b in (
             format_context(hits, installed_sets_on("claude-code")) if hits else "",
             memory_block(prompt, cwd, session_id)) if b]
@@ -206,7 +230,9 @@ def run_hook(stdin_text: str | None = None, host: HostId = "claude-code") -> str
         return None
     cwd = payload.get("cwd") or None
     session_id = payload.get("session_id") or ""
-    hits = _dedup_hits(route_prompt(prompt), session_id)
+    hits = _dedup_hits(_drop_demoted(route_prompt(prompt)), session_id)
+    if hits:
+        _record_suggested(hits)
     blocks = [b for b in (
         format_context(hits, installed_sets_on(host)) if hits else "",
         memory_block(prompt, cwd, session_id)) if b]

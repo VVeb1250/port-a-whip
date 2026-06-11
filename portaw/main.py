@@ -303,6 +303,33 @@ def router_test(prompt: tuple[str, ...]):
         click.echo(f"    score={h.score:.3f} type={h.cap.ctype}")
 
 
+@router.command("outcomes")
+@click.option("--forget", "forget_name", default=None, metavar="NAME",
+              help="Reset one capability's counters (un-demote it).")
+def router_outcomes(forget_name: str | None):
+    """Suggestion → conversion ledger: what the router emits vs what gets used.
+
+    A set suggested ≥5 times that never converted is DEMOTED (stops surfacing)
+    until its `portaw install` runs or you --forget it here."""
+    from portaw.memory import outcomes
+
+    if forget_name:
+        if outcomes.forget(forget_name):
+            click.echo(f"reset: {forget_name}")
+        else:
+            raise click.ClickException(f"no outcome record for {forget_name!r}")
+        return
+    records = outcomes.load()
+    if not records:
+        click.echo("(no outcomes yet — the router hook fills this live)")
+        return
+    demoted = outcomes.demoted_names()
+    for n, r in sorted(records.items(), key=lambda kv: -kv[1].get("suggested", 0)):
+        flag = "  ⛔ demoted" if n in demoted else ""
+        click.echo(f"  {n:<22} suggested ×{r.get('suggested', 0):<4} "
+                   f"used ×{r.get('used', 0):<3}{flag}")
+
+
 @router.command("enable")
 @click.option("--host", default=None, help="claude-code (default) / codex / gemini.")
 @click.option("--command", default=None, help="Hook command to wire (default: per-host).")

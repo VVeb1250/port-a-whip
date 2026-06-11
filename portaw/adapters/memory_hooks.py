@@ -141,12 +141,27 @@ def run_tool_hook(stdin_text: str | None = None) -> str | None:
         tool = p.get("tool_name") or ""
         tin = p.get("tool_input") if isinstance(p.get("tool_input"), dict) else {}
         if tool == "Bash":
+            _mark_install_conversion(str(tin.get("command") or ""))
             return _bash_hook(p, tin)
         if tool in _EDIT_TOOLS:
             return _edit_hook(p, tin)
         return None
     except Exception:
         return None
+
+
+def _mark_install_conversion(command: str) -> None:
+    """Outcome loop (L2): a `portaw install <set>` running through Bash is the
+    conversion signal for a router suggestion — the one surface paw already
+    watches. Fail-safe no-op."""
+    try:
+        from portaw.memory import outcomes
+
+        target = outcomes.parse_install_target(command)
+        if target:
+            outcomes.mark_used(target)
+    except Exception:
+        pass
 
 
 def _recall_selected(query_prompt, query, p, sid):
