@@ -226,7 +226,7 @@ def _enable_json(w: Wiring, command: str, marker: str = _ROUTER_CMD,
     if matcher:
         block["matcher"] = matcher  # tool-scoped events (PostToolUse) — never fire wide
     hooks.setdefault(w.event, []).append(block)
-    return True, _write(w.path, json.dumps(settings, indent=2))
+    return True, _write(w.path, json.dumps(settings, indent=2, ensure_ascii=False))
 
 
 def _disable_json(w: Wiring, marker: str = _ROUTER_CMD) -> bool:
@@ -243,9 +243,15 @@ def _disable_json(w: Wiring, marker: str = _ROUTER_CMD) -> bool:
     ]
     if len(kept) == len(blocks):
         return False
-    settings["hooks"][w.event] = kept
+    if kept:
+        settings["hooks"][w.event] = kept
+    else:
+        del settings["hooks"][w.event]  # last block gone → drop the empty event key
+        if not settings["hooks"]:
+            del settings["hooks"]
     try:
-        w.path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+        w.path.write_text(json.dumps(settings, indent=2, ensure_ascii=False),
+                          encoding="utf-8")
     except OSError as e:
         raise ValueError(f"Cannot write {w.path}: {e}") from e
     return True

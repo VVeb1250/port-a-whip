@@ -733,8 +733,11 @@ def memory_consolidate(dry_run: bool):
     if dry_run:
         click.echo("(dry-run — nothing written)")
         return
-    save_lessons(res.kept)
+    # archive FIRST: if the process dies between the two writes, the worst case is
+    # a duplicate in the archive — the reverse order would lose the archived
+    # lessons forever (already dropped from the store, never written to archive).
     append_archive(res.archived)
+    save_lessons(res.kept)
     click.echo("consolidated.")
 
 

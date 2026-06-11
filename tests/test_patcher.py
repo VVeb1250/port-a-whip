@@ -153,3 +153,53 @@ def test_patch_and_unpatch_toml_round_trip(tmp_path):
 def test_unpatch_absent_file_returns_none(tmp_path):
     hc = _json_host(tmp_path)
     assert unpatch_host(hc, "anything") is None
+
+
+def test_unpatch_absent_name_is_true_noop(tmp_path):
+    """Target not in config → no rewrite, no backup, byte-identical file."""
+    hc = _json_host(tmp_path)
+    original = json.dumps({"mcpServers": {"keep": {"command": "k"}}})  # deliberately unformatted
+    hc.path.write_text(original, encoding="utf-8")
+    assert unpatch_host(hc, "ghost") is None
+    assert hc.path.read_text(encoding="utf-8") == original
+    assert list(tmp_path.glob("*.paw-bak-*")) == []
+
+    hc_t = _toml_host(tmp_path)
+    base = merge_toml("", "keep", {"command": "k", "args": []})
+    hc_t.path.write_text(base, encoding="utf-8")
+    assert unpatch_host(hc_t, "ghost") is None
+    assert hc_t.path.read_text(encoding="utf-8") == base
+
+
+def test_patch_host_preserves_non_ascii(tmp_path):
+    """ensure_ascii=False: Thai text in the user's config must survive verbatim."""
+    hc = _json_host(tmp_path)
+    hc.path.write_text(
+        json.dumps({"note": "ห้ามแก้", "mcpServers": {}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    patch_host(hc, "context7", _ENTRY)
+    text = hc.path.read_text(encoding="utf-8")
+    assert "ห้ามแก้" in text and "\\u0e2b" not in text
+
+
+def test_patch_host_refuses_when_file_changed_underneath(tmp_path, monkeypatch):
+    """Host rewrote its config between our read and write → PatchError, no clobber."""
+    import portaw.sets.patcher as patcher
+
+    hc = _json_host(tmp_path)
+    original = json.dumps({"mcpServers": {}, "host_state": 1})
+    hc.path.write_text(original, encoding="utf-8")
+
+    real_read = patcher._read
+
+    def race_read(path):
+        text = real_read(path)
+        # simulate the host writing AFTER we read, BEFORE we write
+        hc.path.write_text(json.dumps({"mcpServers": {}, "host_state": 2}), encoding="utf-8")
+        return text
+
+    monkeypatch.setattr(patcher, "_read", race_read)
+    with pytest.raises(PatchError, match="changed while patching"):
+        patch_host(hc, "context7", _ENTRY)
+    assert json.loads(hc.path.read_text(encoding="utf-8"))["host_state"] == 2  # host's write intact

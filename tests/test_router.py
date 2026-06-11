@@ -132,6 +132,14 @@ def test_disable_removes_only_router_block(tmp_cc):
     assert cmds == ["keep-me"]
 
 
+def test_disable_drops_empty_event_key_json(tmp_cc):
+    """Parity with the TOML path: last router block gone → no empty event list left."""
+    r.enable("claude-code")
+    assert r.disable("claude-code") is True
+    data = json.loads(tmp_cc.read_text())
+    assert "hooks" not in data  # only block was ours → whole key dropped
+
+
 def test_gemini_enable_uses_beforeagent_event_and_host_command(tmp_gemini):
     changed, _ = r.enable("gemini")
     assert changed

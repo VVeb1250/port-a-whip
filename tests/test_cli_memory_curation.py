@@ -90,3 +90,19 @@ def test_rm_unknown_id_fails_loudly(monkeypatch):
     _patch_store(monkeypatch, [_lesson("x")])
     res = CliRunner().invoke(cli, ["memory", "rm", "nope"])
     assert res.exit_code != 0
+
+
+def test_consolidate_archives_before_overwriting_store(monkeypatch):
+    """Crash-safety order: if append_archive fails, the store must be UNTOUCHED
+    (reverse order would have already dropped the archived lessons forever)."""
+    stale = _lesson("stale thing", confidence=0.5, last_seen="2020-01-01")
+    state = [stale]
+    _patch_store(monkeypatch, state)
+
+    def boom(entries):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(store, "append_archive", boom)
+    res = CliRunner().invoke(cli, ["memory", "consolidate"])
+    assert res.exit_code != 0           # the failure surfaces
+    assert state == [stale]             # store not overwritten — nothing lost

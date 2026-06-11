@@ -133,6 +133,23 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8") if path.exists() else ""
 
 
+def _mtime_ns(path: Path) -> int | None:
+    try:
+        return path.stat().st_mtime_ns
+    except OSError:
+        return None
+
+
+def _guard_unchanged(path: Path, before: int | None) -> None:
+    """The host (e.g. a running Claude Code) rewrites its own config; if the file
+    changed between our read and our write, writing would silently destroy the
+    host's update — refuse instead of clobbering."""
+    if _mtime_ns(path) != before:
+        raise PatchError(
+            f"{path} changed while patching (is the host running?) — re-run the command"
+        )
+
+
 def is_installed(hc: HostConfig, name: str) -> bool:
     """Is server `name` already present in this host's config?"""
     text = _read(hc.path)
@@ -147,13 +164,18 @@ def patch_host(hc: HostConfig, name: str, entry: dict) -> Path | None:
 
     Returns the backup path (None if config file was created fresh).
     """
+    before = _mtime_ns(hc.path)
     text = _read(hc.path)
     if hc.fmt == "json":
         try:
             config = json.loads(text) if text.strip() else {}
         except json.JSONDecodeError as e:
             raise PatchError(f"existing {hc.path} is not valid JSON: {e}") from e
-        out_text = json.dumps(merge_json(config, hc.servers_key, name, entry), indent=2)
+        # ensure_ascii=False: the user's config may carry non-ASCII (paths, notes) —
+        # escaping it to \uXXXX churns every such line on each patch.
+        out_text = json.dumps(
+            merge_json(config, hc.servers_key, name, entry), indent=2, ensure_ascii=False
+        )
         try:
             json.loads(out_text)  # validate
         except json.JSONDecodeError as e:  # pragma: no cover - defensive
@@ -166,6 +188,7 @@ def patch_host(hc: HostConfig, name: str, entry: dict) -> Path | None:
             raise PatchError(f"TOML patch invalid for {hc.path}: {e}") from e
 
     try:
+        _guard_unchanged(hc.path, before)
         backup = _backup(hc.path) if hc.path.exists() else None
         hc.path.parent.mkdir(parents=True, exist_ok=True)
         hc.path.write_text(out_text, encoding="utf-8")
@@ -175,16 +198,28 @@ def patch_host(hc: HostConfig, name: str, entry: dict) -> Path | None:
 
 
 def unpatch_host(hc: HostConfig, name: str) -> Path | None:
-    """Remove server `name`. Backup first. No-op (still backs up) if absent."""
+    """Remove server `name`. Backup first. True no-op (no rewrite) if absent —
+    a rewrite would reformat the whole config for nothing."""
+    before = _mtime_ns(hc.path)
     text = _read(hc.path)
     if not text.strip():
         return None
     if hc.fmt == "json":
-        config = json.loads(text)
-        out_text = json.dumps(remove_json(config, hc.servers_key, name), indent=2)
+        try:
+            config = json.loads(text)
+        except json.JSONDecodeError as e:
+            raise PatchError(f"existing {hc.path} is not valid JSON: {e}") from e
+        if not has_json(config, hc.servers_key, name):
+            return None
+        out_text = json.dumps(
+            remove_json(config, hc.servers_key, name), indent=2, ensure_ascii=False
+        )
     else:
+        if not has_toml(text, name):
+            return None
         out_text = remove_toml(text, name)
     try:
+        _guard_unchanged(hc.path, before)
         backup = _backup(hc.path) if hc.path.exists() else None
         hc.path.parent.mkdir(parents=True, exist_ok=True)
         hc.path.write_text(out_text, encoding="utf-8")
