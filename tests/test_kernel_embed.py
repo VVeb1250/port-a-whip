@@ -70,6 +70,21 @@ def test_embed_scores_empty_on_empty_corpus(tmp_path):
     assert embed.embed_scores("hi", [], md=tmp_path / "no-model") == {}
 
 
+# --- embed-unify: the public encode() seam (no model needed) ---
+
+def test_encode_public_entry_is_callable():
+    # the shared seam the author's skill-router embed.py delegates to
+    assert callable(embed.encode)
+
+
+def test_encode_raises_when_unavailable(tmp_path):
+    # encode() does NOT swallow failures — the caller owns the fallback
+    # (skill-router → inline ONNX, route() → TF-IDF floor). Missing model/libs
+    # at a bogus dir must raise, never silently return [].
+    with pytest.raises(Exception):
+        embed.encode(["x"], md=tmp_path / "no-model")
+
+
 # --- real ONNX path (skipped if model/libs absent) ---
 
 _HAVE_MODEL = embed.available()

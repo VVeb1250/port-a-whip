@@ -118,6 +118,18 @@ def _encode(texts, md: Path | str | None = None):
     return (emb / norm).astype(np.float32)
 
 
+def encode(texts, md: Path | str | None = None):
+    """Public embed entry → (n, dim) L2-normalized float32 matrix, served by the
+    ONE process-wide cached ONNX session (``_load`` memoizes it per model dir).
+
+    This is the shared seam for embed-unify: the author's skill-router ``embed.py``
+    delegates its own ``_encode`` here when paw is importable, so a prompt that
+    fires BOTH skill-semantic search and paw memory-recall tier-2 in one process
+    loads MiniLM once, not twice. Raises if deps/model are missing — the caller
+    owns the fallback (skill-router → inline ONNX; route() → TF-IDF floor)."""
+    return _encode(texts, md)
+
+
 _CACHE_MAX = 8  # distinct corpora cached per process (hooks are short-lived anyway)
 
 
