@@ -191,6 +191,7 @@
           "version": "pin-at-install",
           "kind": "hook-proxy",
           "purpose": "PreToolUse hook rewrites Bash commands to rtk equivalents, compresses shell output (cargo/pytest/go test/git/grep/find/ls/tsc/eslint/docker/kubectl) before it enters context. 60-90% on common dev commands (vendor).",
+          "_build_test_coverage_note": "2026-06-12 audit (vs an 'extend rtk with output summarization' proposal): rtk ALREADY ships the build/test summarizer class — `rtk test` (failures-only), `rtk summary <cmd>` (generic heuristic), `rtk err <cmd>` (errors-only), `rtk pipe` (stdin filter), plus per-tool filters (pytest/cargo/tsc/jest/vitest/mypy/ruff/lint/next/dotnet/npm/playwright). Local proof: `rtk pytest` on a 297-test suite -> ONE line ('Pytest: 297 passed'). DO NOT propose building this. The REAL gap is ADOPTION: the hook does not rewrite interpreter-prefixed forms (`py -m pytest`, `python -m ...`) -> those runs enter context raw; call the rtk form explicitly. Mechanism note: a PostToolUse 'output interceptor' is impossible on Claude Code (output already entered context when the event fires) — PreToolUse command-rewrite is the only working model, i.e. rtk's existing one. Also `rtk discover` scanned 0 sessions on this Windows box (CC history path mismatch, upstream issue).",
           "install": [
             {
               "label": "install rtk binary",
