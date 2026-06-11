@@ -117,10 +117,20 @@ def _covering(selected, prog: str):
     return None
 
 
-def _nudge_block(sig: str, count: int) -> str:
-    return (f"⚠️ paw: hit `{sig}` ×{count} this session with no lesson — "
-            f"if you know the fix, capture it: "
-            f"`portaw memory add \"<trigger> → <fix>\" --trigger <term>`")
+def _nudge_block(sig: str, count: int, err: str = "") -> str:
+    """Capture nudge with a PREFILLED command. The reader of this block is the
+    AGENT — the best failure detector there is (it just saw the error and is about
+    to apply the fix). The NL transcript detector yields ~0; handing the agent a
+    ready-to-run `memory add` with the trigger and error already filled turns the
+    proven manual capture path into a one-edit action."""
+    tag, _, prog = sig.partition("|")
+    trigger = prog or (tag.split()[0] if tag else "term")
+    # first error line, quote-sanitized, becomes the lesson trigger text
+    first = (err.strip().splitlines() or [""])[0][:80].replace('"', "'").replace("`", "'")
+    prefill = (f'portaw memory add "{first or tag} → <the fix you are about to apply>"'
+               f' --trigger "{trigger}"')
+    return (f"⚠️ paw: hit `{sig}` ×{count} with no lesson. If you just fixed this, "
+            f"capture it now (edit the fix part only):\n  {prefill}")
 
 
 def run_tool_hook(stdin_text: str | None = None) -> str | None:
@@ -196,7 +206,7 @@ def _bash_hook(p: dict, tin: dict) -> str | None:
         if not sid or key not in sessionlog.seen(sid):
             if sid:
                 sessionlog.mark(sid, [key])
-            return _envelope("PostToolUse", _nudge_block(rec["sig"], rec["count"]))
+            return _envelope("PostToolUse", _nudge_block(rec["sig"], rec["count"], err))
     return None
 
 

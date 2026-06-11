@@ -111,6 +111,21 @@ def test_nudge_fires_on_second_uncovered_hit(tmp_path, monkeypatch):
     assert out is not None and "no lesson" in out and "command not found|zoxide" in out
 
 
+def test_nudge_is_prefilled_and_quote_safe(tmp_path, monkeypatch):
+    """#9: the nudge hands the agent a ready-to-run memory add — trigger from the
+    signature program, error line embedded, double quotes sanitized."""
+    _wire(monkeypatch, tmp_path, lessons=[])
+    p = _bash('zoxide: command not found for "weird" arg', sid="pf", cmd="zoxide query x")
+    run_tool_hook(p)
+    out = run_tool_hook(p)
+    assert out is not None
+    ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+    assert 'portaw memory add "' in ctx               # ready-to-run command
+    assert '--trigger "zoxide"' in ctx                # trigger prefilled from sig
+    assert "zoxide: command not found" in ctx         # real error line embedded
+    assert '"weird"' not in ctx                       # inner quotes sanitized to '
+
+
 def test_nudge_dedups_within_session(tmp_path, monkeypatch):
     _wire(monkeypatch, tmp_path, lessons=[])
     p = _bash("zoxide: command not found", sid="n2", cmd="zoxide query x")
