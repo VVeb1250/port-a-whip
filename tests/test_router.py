@@ -68,6 +68,45 @@ def test_run_hook_tolerates_garbage_stdin():
     assert r.run_hook(stdin_text="not json at all {{{") is None
 
 
+# ---- install-aware routing + session dedup (#5/#6) ----
+
+def test_format_context_switches_installed_set_to_usage_pointer():
+    hits = r.route_prompt("scan staged diff for leaked secret credentials")
+    assert hits and hits[0].cap.name == "secure-agent"
+    out = r.format_context(hits, installed={"secure-agent": ["gitleaks"]})
+    assert "installed ✓" in out and "gitleaks" in out
+    assert "portaw install secure-agent" not in out
+    # not installed → install pointer unchanged
+    out2 = r.format_context(hits, installed={})
+    assert "portaw install secure-agent" in out2
+
+
+def test_run_hook_uses_state_ledger_for_installed(monkeypatch):
+    import portaw.sets.state as state_mod
+
+    monkeypatch.setattr(state_mod, "installed_sets",
+                        lambda host: {"secure-agent": {"tools": {"gitleaks": {}}}})
+    payload = json.dumps({"prompt": "scan staged diff for leaked secret credentials"})
+    out = r.run_hook(stdin_text=payload)
+    ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+    assert "installed ✓" in ctx and "portaw install secure-agent" not in ctx
+
+
+def test_run_hook_dedups_set_suggestion_within_session(tmp_path, monkeypatch):
+    import portaw.memory.sessionlog as sessionlog
+
+    monkeypatch.setattr(sessionlog, "_dir", lambda: tmp_path / "session")
+    payload = json.dumps({"prompt": "scan staged diff for leaked secret credentials",
+                          "session_id": "dedup1"})
+    out1 = r.run_hook(stdin_text=payload)
+    assert out1 is not None and "secure-agent" in out1
+    assert r.run_hook(stdin_text=payload) is None    # same session → silent
+    # a different session still gets the suggestion
+    other = json.dumps({"prompt": "scan staged diff for leaked secret credentials",
+                        "session_id": "dedup2"})
+    assert r.run_hook(stdin_text=other) is not None
+
+
 # ---- enable / disable / status: JSON hosts (CC, Gemini) ----
 
 @pytest.fixture

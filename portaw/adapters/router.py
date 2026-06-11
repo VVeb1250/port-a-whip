@@ -81,11 +81,50 @@ def route_prompt(prompt: str, cfg: RouteConfig | None = None) -> list[Hit]:
                  embed_fn=lazy_embedder())
 
 
-def format_context(hits: list[Hit]) -> str:
+def installed_sets_on(host: HostId) -> dict[str, list[str]]:
+    """set name → mcp tools paw installed on this host (from the state ledger).
+    {} on any error — install-awareness is an optimization, never a blocker."""
+    try:
+        from portaw.sets import state
+
+        return {s: sorted(rec.get("tools", {}))
+                for s, rec in state.installed_sets(host).items()}
+    except Exception:
+        return {}
+
+
+def format_context(hits: list[Hit], installed: dict[str, list[str]] | None = None) -> str:
+    """Router block. An already-installed set switches from an install pointer to a
+    usage pointer — suggesting `portaw install X` for an installed X is wrong
+    advice, but staying silent would lose the discoverability the router exists
+    for (Gap-B: remind the agent what it already HAS)."""
+    installed = installed or {}
     lines = ["\U0001f43e paw router:"]
     for h in hits:
-        lines.append(f"• {h.cap.name} — {h.cap.desc} · {h.cap.invoke}")
+        if h.cap.ctype == "set" and h.cap.name in installed:
+            tools = ", ".join(installed[h.cap.name]) or "see `portaw sets show`"
+            lines.append(f"• {h.cap.name} — {h.cap.desc} · installed ✓ use: {tools}")
+        else:
+            lines.append(f"• {h.cap.name} — {h.cap.desc} · {h.cap.invoke}")
     return "\n".join(lines)
+
+
+def _dedup_hits(hits: list[Hit], session_id: str) -> list[Hit]:
+    """A set suggested once in this session never re-suggests (context rot) —
+    same dedup log L3 uses, ids namespaced with `set:` so they never collide
+    with lesson content-hashes. No session id → no log → pass through."""
+    if not session_id or not hits:
+        return hits
+    try:
+        from portaw.memory import sessionlog
+
+        seen = sessionlog.seen(session_id)
+        fresh = [h for h in hits if f"set:{h.cap.name}" not in seen]
+        if fresh:
+            sessionlog.mark(session_id, [f"set:{h.cap.name}" for h in fresh])
+        return fresh
+    except Exception:
+        return hits
 
 
 def memory_block(prompt: str, cwd: str | None = None, session_id: str = "") -> str:
@@ -139,9 +178,10 @@ def paw_block(prompt: str, cwd: str | None = None, session_id: str = "") -> str:
     try:
         if len((prompt or "").strip()) < _MIN_PROMPT_LEN:
             return ""
-        hits = route_prompt(prompt)
-        blocks = [b for b in (format_context(hits) if hits else "",
-                              memory_block(prompt, cwd, session_id)) if b]
+        hits = _dedup_hits(route_prompt(prompt), session_id)
+        blocks = [b for b in (
+            format_context(hits, installed_sets_on("claude-code")) if hits else "",
+            memory_block(prompt, cwd, session_id)) if b]
         return "\n".join(blocks)
     except Exception:
         return ""
@@ -166,9 +206,10 @@ def run_hook(stdin_text: str | None = None, host: HostId = "claude-code") -> str
         return None
     cwd = payload.get("cwd") or None
     session_id = payload.get("session_id") or ""
-    hits = route_prompt(prompt)
-    blocks = [b for b in (format_context(hits) if hits else "",
-                          memory_block(prompt, cwd, session_id)) if b]
+    hits = _dedup_hits(route_prompt(prompt), session_id)
+    blocks = [b for b in (
+        format_context(hits, installed_sets_on(host)) if hits else "",
+        memory_block(prompt, cwd, session_id)) if b]
     if not blocks:
         return None
     event = _WIRING[host].event if host in _WIRING else "UserPromptSubmit"
