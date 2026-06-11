@@ -960,6 +960,252 @@
           "claude-code"
         ]
       }
+    },
+    {
+      "set_name": "data-query",
+      "description": "Token-lean structured-data answers: query CSV/Parquet/JSON/SQLite with ONE SQL or jq line instead of Read-ing the whole file into context. Pure CLI (DuckDB + jq) — ZERO MCP tool-defs on every host. Token cut by construction: a 50k-row CSV Read costs the whole file; `duckdb -c \"SELECT …\"` returns only the answer slice.",
+      "_axis_note": "axis = ↓token by construction — the targeted-query-vs-whole-file lever, same frame as web-research's targeted extract but on LOCAL data files where the discovery cost objection does NOT apply: schema discovery is one cheap bounded call (`DESCRIBE SELECT * FROM 'f.csv'` / `jq 'keys'`), not a full-page fetch. Secondary ↑quality: aggregates/joins computed by the engine are EXACT — the agent stops eyeballing rows and hallucinating sums. 0 MCP defs → N1-free, stacks with every other set on any host.",
+      "trigger_terms": [
+        "csv",
+        "parquet",
+        "sqlite",
+        "jq",
+        "sql query",
+        "dataset",
+        "data file",
+        "analyze data",
+        "aggregate",
+        "json file",
+        "spreadsheet",
+        "rows",
+        "columns",
+        "log file",
+        "duckdb"
+      ],
+      "token_profile": {
+        "method": "measured = ccusage A/B (portaw bench --ab/--how) on the set's canonical workload, or command-level rtk-gain instrumentation. calculated = tiktoken (cl100k_base proxy) on the verbatim live MCP tool-def JSON the host loads (host tokenizers vary ~10-15%). vendor-claimed = from vendor docs, unverified. estimated = reasoned, not measured. neutral = 0 MCP tool-defs by construction (CLI/hook/skill), idle schema cost provably zero. delta_pct = signed % tokens saved (+ = saved); idle_def_tokens = always-on tool-def cost on load-all hosts (0 on Claude Code, which lazy-loads).",
+        "hosts": {
+          "claude-code": {
+            "provenance": "neutral",
+            "delta_pct": null,
+            "idle_def_tokens": 0,
+            "sample": "0 MCP servers (duckdb + jq = CLI on demand).",
+            "note": "Idle provably zero. Runtime delta_pct deliberately null until a paw A/B runs — but the mechanism is structural: query output is bounded by the query (LIMIT/aggregate), whole-file Read is bounded by the file. A 2MB CSV ≈ 500K+ tok to Read vs tens of tok for the aggregate answer."
+          },
+          "codex": {
+            "provenance": "neutral",
+            "delta_pct": null,
+            "idle_def_tokens": 0,
+            "sample": "0 MCP defs.",
+            "note": "CLI invoked on demand; no startup schema cost even on load-all host."
+          },
+          "gemini": {
+            "provenance": "neutral",
+            "delta_pct": null,
+            "idle_def_tokens": 0,
+            "sample": "0 MCP defs.",
+            "note": "same — neutral by construction."
+          }
+        }
+      },
+      "mcp": [],
+      "non_mcp": [
+        {
+          "tool": "duckdb",
+          "display_name": "DuckDB CLI",
+          "ref": "duckdb/duckdb",
+          "license": "MIT",
+          "version": "v1.5.2",
+          "_version_note": "v1.5.2 = latest stable 2026-04-13; v1.4.x = LTS line (supported 1 year). Either is fine; pin at install.",
+          "kind": "cli",
+          "health_binary": "duckdb",
+          "purpose": "In-process SQL engine that queries CSV/Parquet/JSON/SQLite FILES directly (`FROM 'data.csv'`, `sqlite_scan(...)`, globs over partitioned parquet) — no import step, no server. The agent answers filter/aggregate/join questions in one bounded call instead of paging a whole data file through context.",
+          "install": [
+            {
+              "label": "install duckdb CLI (winget)",
+              "cmd": "winget install DuckDB.cli",
+              "_alt_brew": "brew install duckdb",
+              "_alt_sh": "curl https://install.duckdb.org | sh",
+              "runs_vendor_code": true
+            }
+          ],
+          "usage_hint": "duckdb -c \"SELECT col, count(*) FROM 'data.csv' GROUP BY 1 ORDER BY 2 DESC LIMIT 10\"   |   schema first: duckdb -c \"DESCRIBE SELECT * FROM 'data.csv'\"   |   duckdb -json -c \"FROM 'logs/*.parquet' LIMIT 5\"   |   duckdb -c \"FROM sqlite_scan('app.db','users') LIMIT 5\"",
+          "host_support": [
+            "claude-code",
+            "codex",
+            "gemini",
+            "cursor",
+            "aider"
+          ]
+        },
+        {
+          "tool": "jq",
+          "display_name": "jq (JSON slicer)",
+          "ref": "jqlang/jq",
+          "license": "MIT",
+          "version": "jq-1.8.1",
+          "kind": "cli",
+          "health_binary": "jq",
+          "purpose": "Command-line JSON processor: pull exactly the fields/paths needed from a large JSON file or API response instead of Read-ing the whole document. Composable with curl/gh pipelines the agent already runs.",
+          "install": [
+            {
+              "label": "install jq (winget)",
+              "cmd": "winget install jqlang.jq",
+              "_alt_brew": "brew install jq",
+              "runs_vendor_code": true
+            }
+          ],
+          "usage_hint": "jq '.items[] | {id, name}' big.json   |   jq -r '.[].url' resp.json   |   shape first: jq 'keys' obj.json / jq 'length' arr.json",
+          "host_support": [
+            "claude-code",
+            "codex",
+            "gemini",
+            "cursor",
+            "aider"
+          ]
+        }
+      ],
+      "optional_sources": [
+        {
+          "tool": "yq",
+          "kind": "cli",
+          "ref": "mikefarah/yq",
+          "license": "MIT",
+          "note": "Same slicing lever for YAML/XML/TOML (jq syntax). Optional rung — add when the workload is config-file-heavy (k8s/CI manifests). winget install MikeFarah.yq / brew install yq.",
+          "usage_hint": "yq '.services | keys' docker-compose.yml"
+        }
+      ],
+      "rejected": [
+        {
+          "tool": "duckdb MCP servers (mcp-server-motherduck / community wrappers)",
+          "reason": "MCP server wrapping a LOCAL CLI = pure idle-def cost for zero capability gain — `duckdb -c` is already one bounded call with no session state worth holding. Same lean-vs-heavy verdict as playwright-MCP vs browser-harness.",
+          "axis": "idle-def blow for no capability delta"
+        },
+        {
+          "tool": "pandas-in-REPL as the data lever",
+          "reason": "Works but costs a multi-line script + interpreter session per question; duckdb answers the same filter/aggregate question in one flag-bounded shell call. Not rejected from the agent's toolbox — just not the curated lever.",
+          "axis": "more tokens per answer, same result"
+        }
+      ],
+      "compat_notes": "CURATION VALUE — the targeted-query lever for LOCAL structured data, 0 MCP defs. Non-overlapping with neighbours: codegraph = code structure, data-query = data FILES; web-research = remote pages, data-query = local files; doc-extract = RENDER binary office docs to readable md, data-query = QUERY-shaped questions (xlsx overlap rule: 'what does the sheet say' → markitdown render; 'sum/filter/join the rows' → duckdb). rtk: no hook collision (rtk rewrites its known command list; duckdb/jq pass through, and their output is already bounded by the query — nothing to compress). N1: 0 MCP → stacks with everything. Both tools keyless, offline, single binary.",
+      "verified": {
+        "date": "2026-06-12",
+        "status": "DRAFT — refs + versions confirmed via web search 2026-06-12 (duckdb v1.5.2 stable / v1.4 LTS; jq 1.8.1, ~34.7k★). NOT install-tested (neither binary on the dev box yet — see DOGFOOD-PENDING). token_profile neutral by construction (0 MCP defs); runtime delta_pct needs a paw A/B (whole-file Read vs duckdb query on a fixed CSV workload — deterministic tiktoken, same method as web-research).",
+        "config_block_confirmed": "n/a — no MCP config; install commands quoted from official docs (install.duckdb.org, jqlang download page)",
+        "token_profile_benchmarked": false,
+        "hosts": []
+      }
+    },
+    {
+      "set_name": "doc-extract",
+      "description": "Read the unreadable: ONE CLI call (Microsoft MarkItDown) converts docx/xlsx/pptx — formats host Read tools cannot open at all — plus PDF/HTML/images to clean structure-preserving markdown. The agent then greps/slices the markdown section it needs instead of failing on a binary blob. 0 MCP tool-defs (CLI anchor).",
+      "_axis_note": "axis = ↑context-quality FIRST (binary office files are invisible to the agent without this — a capability gap, like browser-automation), ↓token second (markdown that preserves headings/tables lets the agent slice the relevant section; honest: unmeasured). HONEST CC NOTE: Claude Code's native Read already handles PDF and images — on CC the real gap is docx/xlsx/pptx ONLY; the PDF/image rungs matter on hosts WITHOUT native PDF read (Codex/Gemini CLI). delta_pct intentionally null — capability-class, do NOT fabricate a saving.",
+      "trigger_terms": [
+        "docx",
+        "xlsx",
+        "pptx",
+        "word document",
+        "excel file",
+        "powerpoint",
+        "office document",
+        "convert to markdown",
+        "read document",
+        "extract text",
+        "presentation",
+        "pdf"
+      ],
+      "token_profile": {
+        "method": "measured = ccusage A/B (portaw bench --ab/--how) on the set's canonical workload, or command-level rtk-gain instrumentation. calculated = tiktoken (cl100k_base proxy) on the verbatim live MCP tool-def JSON the host loads (host tokenizers vary ~10-15%). vendor-claimed = from vendor docs, unverified. estimated = reasoned, not measured. neutral = 0 MCP tool-defs by construction (CLI/hook/skill), idle schema cost provably zero. delta_pct = signed % tokens saved (+ = saved); idle_def_tokens = always-on tool-def cost on load-all hosts (0 on Claude Code, which lazy-loads).",
+        "hosts": {
+          "claude-code": {
+            "provenance": "neutral",
+            "delta_pct": null,
+            "idle_def_tokens": 0,
+            "sample": "0 MCP servers (markitdown = CLI on demand).",
+            "note": "Idle provably zero. Capability-primary: on CC the win is docx/xlsx/pptx (Read opens PDF natively). delta_pct null by honesty — converting then slicing is usually cheaper than nothing-at-all, which is the real baseline for these formats."
+          },
+          "codex": {
+            "provenance": "neutral",
+            "delta_pct": null,
+            "idle_def_tokens": 0,
+            "sample": "0 MCP defs.",
+            "note": "CLI on demand; PDF rung ALSO matters here (no native PDF read)."
+          },
+          "gemini": {
+            "provenance": "neutral",
+            "delta_pct": null,
+            "idle_def_tokens": 0,
+            "sample": "0 MCP defs.",
+            "note": "same — neutral by construction; PDF rung matters."
+          }
+        }
+      },
+      "mcp": [],
+      "non_mcp": [
+        {
+          "tool": "markitdown",
+          "display_name": "MarkItDown (Microsoft)",
+          "ref": "microsoft/markitdown",
+          "license": "MIT",
+          "version": "v0.1.6",
+          "kind": "cli",
+          "health_binary": "markitdown",
+          "purpose": "Official Microsoft converter: docx/xlsx/pptx/pdf/html/images (15+ formats) → markdown that PRESERVES structure (headings, lists, tables, links) — built explicitly for LLM pipelines. One call makes a binary office file greppable/sliceable text.",
+          "install": [
+            {
+              "label": "install markitdown (pip, all converters)",
+              "cmd": "pip install \"markitdown[all]\"",
+              "_windows_note": "on this box: py -m pip install \"markitdown[all]\"",
+              "runs_vendor_code": true
+            }
+          ],
+          "usage_hint": "markitdown report.docx -o report.md   |   markitdown sheet.xlsx   |   markitdown deck.pptx   |   then grep/slice the md instead of re-converting",
+          "host_support": [
+            "claude-code",
+            "codex",
+            "gemini",
+            "cursor",
+            "aider"
+          ]
+        }
+      ],
+      "optional_sources": [
+        {
+          "tool": "markitdown-mcp",
+          "kind": "mcp",
+          "ref": "microsoft/markitdown (packages/markitdown-mcp)",
+          "note": "OFFICIAL MCP form — exactly 1 tool `convert_to_markdown(uri)` (http/https/file/data URIs) = leanest-possible MCP shape (Fetch-class; est. ~250-300 tok idle, NOT tokenized yet). Default stays the CLI (0 idle); take this rung only where shell access is awkward. Local-trusted-agent use only per its README (binds localhost).",
+          "mcp_config": {
+            "command": "markitdown-mcp",
+            "args": [],
+            "env": {}
+          },
+          "needs_env": []
+        },
+        {
+          "tool": "pandoc",
+          "kind": "cli",
+          "ref": "jgm/pandoc",
+          "license": "GPL-2.0",
+          "note": "Universal document converter, BOTH directions (md → docx/pdf output too — markitdown is read-only md). Heavyweight install; add only when the workload needs to PRODUCE office/pdf deliverables, not just read them.",
+          "usage_hint": "pandoc notes.md -o report.docx"
+        }
+      ],
+      "rejected": [
+        {
+          "tool": "community markitdown MCP wrappers (trsdn/markitdown-mcp, KorigamiK, npx wrappers)",
+          "reason": "Official CLI + official 1-tool MCP already cover both shapes; third-party wrappers add supply-chain surface for zero capability delta (paw security: smallest reviewed surface).",
+          "axis": "supply-chain surface, no delta"
+        }
+      ],
+      "compat_notes": "CURATION VALUE — fills the binary-document blind spot at 0 MCP tool-defs. Non-overlapping with neighbours: web-research = remote web pages; doc-extract = LOCAL binary documents; data-query = query-shaped questions (xlsx rule: 'what does the sheet say' → markitdown render; 'sum/filter the rows' → duckdb); context-quality = library docs. N1: 0 MCP → stacks with everything. Anchor keyless/offline after pip install. SECURITY: converting UNTRUSTED documents executes parser code over hostile input — keep markitdown current (pin-at-install, bump on advisories); pairs with secure-agent.",
+      "verified": {
+        "date": "2026-06-12",
+        "status": "DRAFT — ref confirmed via web search 2026-06-12 (microsoft/markitdown official, v0.1.6 2026-05-26, MIT; official markitdown-mcp subpackage = 1 tool convert_to_markdown; aggregator star count ~150k UNVERIFIED). NOT install-tested (markitdown not on the dev box yet — see DOGFOOD-PENDING). token_profile neutral by construction.",
+        "config_block_confirmed": "n/a for CLI anchor; markitdown-mcp config shape from official package README (command markitdown-mcp), not host-captured",
+        "token_profile_benchmarked": false,
+        "hosts": []
+      }
     }
   ]
 }

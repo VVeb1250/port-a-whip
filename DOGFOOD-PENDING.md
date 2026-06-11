@@ -160,6 +160,19 @@ after an actual Gemini host turn.
 
 ---
 
+## 9. [ ] data-query + doc-extract (sets #7-8, added 2026-06-12) — install-test + runtime A/B
+
+**Why:** drafted with web-verified refs/versions (duckdb v1.5.2, jq 1.8.1, markitdown v0.1.6) but NO binary is on the dev box — `verify` will show MISSING until installed. Both sets are 0-MCP CLI (neutral idle, no config patch), so the only gates left are install health + the runtime delta story.
+
+**Steps:**
+1. `winget install DuckDB.cli` + `winget install jqlang.jq` + `py -m pip install "markitdown[all]"` → `portaw verify data-query` / `portaw verify doc-extract` (expect PASS via health_binary which-probe).
+2. data-query runtime A/B (deterministic, same method as web-research): fixed CSV (~2-5MB) + 3 question workload (count-by-group / filter / join) — lane A = Read whole file, lane B = `duckdb -c`. tiktoken both lanes → `delta_pct` with provenance `measured`.
+3. doc-extract: convert one real docx + xlsx, confirm structure survives (tables/headings) → flip DRAFT→verified. No delta_pct (capability-class, stays null).
+
+**Result →** sets.json both sets `verified.status` DRAFT → verified (+ data-query CC `delta_pct`).
+
+---
+
 ## Done this session (for context — NOT pending)
 - ✅ codegraph index BUILT for port-a-whip (21 files/283 nodes) — `codegraph_explore` live for this repo.
 - ✅ semble installed (`uv tool install semble`) — ready for items 1 + load-all hosts.
