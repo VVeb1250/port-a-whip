@@ -173,7 +173,12 @@ def verify(set_name: str, host: str | None):
 
 
 @cli.command()
-def doctor():
+@click.option("--usage", "show_usage", is_flag=True,
+              help="Scan recent transcripts for MCP tool-call evidence — flags "
+                   "servers paying idle def tokens with zero observed use.")
+@click.option("--days", default=30, show_default=True,
+              help="Usage scan window (with --usage).")
+def doctor(show_usage: bool, days: int):
     """Env check + host detect + config parse-validity + paw-managed drift report."""
     import json as _json
 
@@ -211,6 +216,12 @@ def doctor():
         click.echo(f"registry: {len(load_all())} curated sets loaded OK")
     except Exception as e:
         click.echo(f"registry: ERROR — {e}")
+    if show_usage:
+        from portaw.sets.usage import usage_report
+
+        click.echo("")
+        for line in usage_report(days=days):
+            click.echo(line)
 
 
 @cli.group()

@@ -152,10 +152,18 @@ portaw memory inject-enable session|tool|all
 - MCP source = curated sets only (reviewed before entry), not arbitrary registry → small surface
 - patch config: backup + parse-validate before write (avoid corrupt config)
 
+## Evidence loops (2026-06-12 — all 3 layers learn now)
+- **L1 state ledger** `~/.paw/state.json` (sets/state.py): what paw itself wrote per host → precise remove, `doctor` drift report (orphaned/drift vs canonical), no false ownership of user servers.
+- **L1 usage evidence** `doctor --usage` (sets/usage.py): real `tool_use` invocations parsed from CC transcripts (NOT string mentions — defs ride every session and are the cost, not the use) → flags idle-def servers with install date as the A/B anchor.
+- **L2 outcome loop** (memory/outcomes.py): mark_suggested on emit; conversion = `portaw install <set>` seen by the Bash PostToolUse hook; suggested ≥5 + used 0 → demoted (stops surfacing; `router outcomes --forget` resets). Install-aware: installed set → usage pointer, not install pointer. Session dedup via the L3 sessionlog (`set:` namespace).
+- **L3 effectiveness** (`misses` field, gate `miss_distrust=3`): error recurring AFTER a covering lesson exists → misses accumulate + confidence decays at consolidate; misses ≥3 → distrusted EVEN IF recurrence/confidence high (recurrence proves the problem, misses disprove the answer). Pinned exempt. Ledger consumed after apply (no double decay).
+- **L3 sync** `portaw memory sync [--init <private-remote>]` (memory/sync.py): git-backed cross-host lesson sync. Content-hash id = conflict-free fold (field-wise max, idempotent); git = transport only (`show FETCH_HEAD:`, `merge -s ours` ties history); imports quarantined at confidence 0.7 until local recurrence (cap holds across re-syncs). Machine-local files never travel.
+
 ## Known issues / TODOs
 - Gemini adapter (`BeforeAgent`) schema-verified from docs, NOT live (no Gemini host on box).
 - config.py multi-format (CC/Gemini JSON + Codex TOML) — merge without clobbering user's other servers.
 - Cursor/OpenCode: native strong; set-install only, router static. Low priority.
+- gain ledger (#3, continuous per-set token attribution): PARTIAL — usage report carries install dates as bench anchors; auto-attribution via ccusage deferred (use `portaw bench ab`).
 
 ## Harness-quality refinements (2026-06-05, see spec §15)
 - **Router scope** (correction): router fixes Gap-B (discoverability) + tool-selection accuracy, NOT token-overhead on load-all hosts (defs load at startup; router injects on top, can't unload). Overhead → set-size ceiling + code-exec + native lazy-load. Do NOT reorder roadmap L2>L1.
