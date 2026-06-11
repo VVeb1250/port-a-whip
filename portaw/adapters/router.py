@@ -192,10 +192,13 @@ def _backup(path: Path) -> Path:
 
 def _write(path: Path, text: str) -> Path | None:
     """Backup (if present) then write. Returns the backup path (None if fresh)."""
-    backup = _backup(path) if path.exists() else None
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-    return backup
+    try:
+        backup = _backup(path) if path.exists() else None
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        return backup
+    except OSError as e:
+        raise ValueError(f"Cannot write {path}: {e}") from e
 
 
 # ----------------------------------------------------------------- JSON wiring
@@ -227,7 +230,10 @@ def _enable_json(w: Wiring, command: str, marker: str = _ROUTER_CMD,
 
 
 def _disable_json(w: Wiring, marker: str = _ROUTER_CMD) -> bool:
-    settings = json.loads(w.path.read_text(encoding="utf-8"))
+    try:
+        settings = json.loads(w.path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise ValueError(f"Cannot read {w.path}: {e}") from e
     blocks = (settings.get("hooks") or {}).get(w.event)
     if not blocks:
         return False
@@ -238,7 +244,10 @@ def _disable_json(w: Wiring, marker: str = _ROUTER_CMD) -> bool:
     if len(kept) == len(blocks):
         return False
     settings["hooks"][w.event] = kept
-    w.path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+    try:
+        w.path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+    except OSError as e:
+        raise ValueError(f"Cannot write {w.path}: {e}") from e
     return True
 
 
@@ -289,7 +298,10 @@ def _enable_toml(w: Wiring, command: str, marker: str = _ROUTER_CMD) -> tuple[bo
 def _disable_toml(w: Wiring, marker: str = _ROUTER_CMD) -> bool:
     if not w.path.exists():
         return False
-    text = w.path.read_text(encoding="utf-8")
+    try:
+        text = w.path.read_text(encoding="utf-8")
+    except OSError as e:
+        raise ValueError(f"Cannot read {w.path}: {e}") from e
     if not text.strip():
         return False
     doc = tomlkit.parse(text)
@@ -312,7 +324,10 @@ def _disable_toml(w: Wiring, marker: str = _ROUTER_CMD) -> bool:
         del hooks[w.event]  # last router block gone → drop the empty event table
         if not hooks:
             del doc["hooks"]
-    w.path.write_text(tomlkit.dumps(doc), encoding="utf-8")
+    try:
+        w.path.write_text(tomlkit.dumps(doc), encoding="utf-8")
+    except OSError as e:
+        raise ValueError(f"Cannot write {w.path}: {e}") from e
     return True
 
 
@@ -341,7 +356,7 @@ def status(host: HostId) -> dict:
             text = w.path.read_text(encoding="utf-8")
             wired = (_is_wired_json(json.loads(text or "{}"), w.event) if w.fmt == "json"
                      else _is_wired_toml(text, w.event))
-        except (json.JSONDecodeError, tomlkit.exceptions.ParseError):
+        except (OSError, json.JSONDecodeError, tomlkit.exceptions.ParseError):
             wired = False
     return {"host": host, "settings": str(w.path), "event": w.event,
             "wired": wired, "exists": w.path.exists()}

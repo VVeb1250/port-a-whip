@@ -165,10 +165,13 @@ def patch_host(hc: HostConfig, name: str, entry: dict) -> Path | None:
         except (tomlkit.exceptions.ParseError, tomllib.TOMLDecodeError) as e:
             raise PatchError(f"TOML patch invalid for {hc.path}: {e}") from e
 
-    backup = _backup(hc.path) if hc.path.exists() else None
-    hc.path.parent.mkdir(parents=True, exist_ok=True)
-    hc.path.write_text(out_text, encoding="utf-8")
-    return backup
+    try:
+        backup = _backup(hc.path) if hc.path.exists() else None
+        hc.path.parent.mkdir(parents=True, exist_ok=True)
+        hc.path.write_text(out_text, encoding="utf-8")
+        return backup
+    except OSError as e:
+        raise PatchError(f"Cannot write {hc.path}: {e}") from e
 
 
 def unpatch_host(hc: HostConfig, name: str) -> Path | None:
@@ -181,6 +184,10 @@ def unpatch_host(hc: HostConfig, name: str) -> Path | None:
         out_text = json.dumps(remove_json(config, hc.servers_key, name), indent=2)
     else:
         out_text = remove_toml(text, name)
-    backup = _backup(hc.path)
-    hc.path.write_text(out_text, encoding="utf-8")
-    return backup
+    try:
+        backup = _backup(hc.path) if hc.path.exists() else None
+        hc.path.parent.mkdir(parents=True, exist_ok=True)
+        hc.path.write_text(out_text, encoding="utf-8")
+        return backup
+    except OSError as e:
+        raise PatchError(f"Cannot write {hc.path}: {e}") from e

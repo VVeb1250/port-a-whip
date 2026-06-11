@@ -1,8 +1,9 @@
-"""portaw CLI entrypoint (v0.3 shell).
+"""portaw CLI entrypoint (v0.3).
 
-Command surface matches port-a-whip-spec.md §8. Bodies are Phase-1 stubs —
-real impl wires to sets/ (loader, patcher, shim), kernel/ (ranking, registry),
-adapters/ (per-host inject). See CLAUDE.md target tree.
+Command surface: port-a-whip-spec.md §8. Wires to sets/ (loader, patcher, shim),
+kernel/ (ranking, registry, embed), adapters/ (router, memory-hooks),
+memory/ (schema, store, retrieval, inject, capture, consolidate, detect, harvest).
+6 groups, 29 commands. See CLAUDE.md for architecture + build status.
 """
 
 import sys
@@ -504,6 +505,41 @@ def memory_export(out_path: str | None):
         click.echo(f"wrote {len(entries)} lesson(s) to {out_path}")
     else:
         click.echo(text)
+
+
+@memory.command("observations")
+@click.option("--min-count", default=1, help="Only show signatures hit at least this often.")
+def memory_observations(min_count: int):
+    """Show the runtime error ledger: repeat-offenders + lessons that aren't working.
+
+    Two signals the write-once store can't give: un-lessoned repeats (capture these)
+    and lessons whose error STILL recurs after they were written (fix may be wrong /
+    not surfacing)."""
+    from portaw.memory import observations
+
+    recs = [r for r in observations.load().values()
+            if int(r.get("count", 0)) >= min_count]
+    if not recs:
+        click.echo("(no observations yet — the Bash-failure hook fills this live)")
+        return
+
+    uncovered = observations.uncovered_repeats(min_count=2)
+    if uncovered:
+        click.echo("⚠️  repeated errors with NO lesson (capture these):")
+        for r in uncovered:
+            click.echo(f"    ×{r['count']:<3} {r['sig']}   (since {r.get('first_seen','?')})")
+
+    leaks = observations.recurring_despite_lesson()
+    if leaks:
+        click.echo("\n🔁 errors STILL recurring after a lesson exists (fix may be wrong):")
+        for r in leaks:
+            click.echo(f"    +{observations.linked_misses(r):<3} after lesson {r.get('lesson_id','?')[:8]}"
+                       f"   {r['sig']}")
+
+    click.echo(f"\nall signatures (≥{min_count}):")
+    for r in sorted(recs, key=lambda x: -int(x.get("count", 0))):
+        cov = f"lesson {r['lesson_id'][:8]}" if r.get("lesson_id") else "—"
+        click.echo(f"  ×{r['count']:<3} {r['sig']:<40} {cov}")
 
 
 @memory.command("rm")

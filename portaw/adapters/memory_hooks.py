@@ -31,6 +31,7 @@ _FAIL_RE = re.compile(
 )
 _EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 _MAX_ERR_CHARS = 800  # route on the error's head — tails are stack-frame noise
+_NUDGE_MIN = 2        # an un-lessoned error seen this many times → prompt to capture
 
 
 def _payload(stdin_text: str | None) -> dict:
@@ -97,52 +98,116 @@ def _error_text(resp) -> str:
     return text[:_MAX_ERR_CHARS]
 
 
+def _covering(selected, prog: str):
+    """The first selected lesson that GENUINELY covers a `prog` error — prog appears
+    in its trigger_terms or body. No prog / no genuine match → None (treat as
+    un-lessoned, so a fuzzy token overlap can't suppress a real capture nudge)."""
+    if not prog:
+        return selected[0] if selected else None
+    from portaw.kernel.ranking import tokenize
+
+    for s in selected:
+        terms = {t.lower() for t in s.entry.trigger_terms} | set(tokenize(s.entry.body))
+        if prog in terms:
+            return s
+    return None
+
+
+def _nudge_block(sig: str, count: int) -> str:
+    return (f"⚠️ paw: hit `{sig}` ×{count} this session with no lesson — "
+            f"if you know the fix, capture it: "
+            f"`portaw memory add \"<trigger> → <fix>\" --trigger <term>`")
+
+
 def run_tool_hook(stdin_text: str | None = None) -> str | None:
-    """PostToolUse dispatch: Bash failure → error recall; Edit/Write → anchor recall."""
+    """PostToolUse dispatch: Bash failure → error recall (+observation ledger +
+    repeat-nudge); Edit/Write → anchor recall."""
     try:
         p = _payload(stdin_text)
         tool = p.get("tool_name") or ""
         tin = p.get("tool_input") if isinstance(p.get("tool_input"), dict) else {}
-
         if tool == "Bash":
-            err = _error_text(p.get("tool_response"))
-            if not err:
-                return None
-            query_prompt, query = err, None
-        elif tool in _EDIT_TOOLS:
-            fp = str(tin.get("file_path") or tin.get("notebook_path") or "")
-            if not fp:
-                return None
-            from portaw.memory.anchors import AnchorQuery
-
-            query_prompt, query = "", AnchorQuery(paths=(fp,))
-        else:
-            return None
-
-        from portaw.memory import sessionlog
-        from portaw.memory.context import host_context
-        from portaw.memory.inject import format_memory, select
-        from portaw.memory.retrieval import recall
-        from portaw.memory.store import load_lessons, load_project
-
-        entries = load_lessons() + load_project()
-        if not entries:
-            return None
-        sid = p.get("session_id") or ""
-        # no embed_fn here: error strings + paths match lexically/structurally;
-        # keeping ONNX out of the per-tool-call path is the latency budget.
-        scored = recall(query_prompt, entries, query=query,
-                        ctx=host_context(p.get("cwd") or None))
-        already = sessionlog.seen(sid) if sid else set()
-        selected = select([s for s in scored if s.entry.id not in already])
-        # tool-surface is opportunistic, not the pinned tier: only entries this
-        # event actually evidenced (a real base score) belong here — a pinned
-        # entry riding through on bypass would re-inject on every tool call.
-        selected = [s for s in selected if s.base > 0]
-        if not selected:
-            return None
-        if sid:
-            sessionlog.mark(sid, [s.entry.id for s in selected])
-        return _envelope("PostToolUse", format_memory(selected))
+            return _bash_hook(p, tin)
+        if tool in _EDIT_TOOLS:
+            return _edit_hook(p, tin)
+        return None
     except Exception:
         return None
+
+
+def _recall_selected(query_prompt, query, p, sid):
+    """Shared recall→dedup→evidence-filter→mark. Returns selected Scored list."""
+    from portaw.memory import sessionlog
+    from portaw.memory.context import host_context
+    from portaw.memory.inject import select
+    from portaw.memory.retrieval import recall
+    from portaw.memory.store import load_lessons, load_project
+
+    entries = load_lessons() + load_project()
+    if not entries:
+        return []
+    # no embed_fn here: error strings + paths match lexically/structurally;
+    # keeping ONNX out of the per-tool-call path is the latency budget.
+    scored = recall(query_prompt, entries, query=query,
+                    ctx=host_context(p.get("cwd") or None))
+    already = sessionlog.seen(sid) if sid else set()
+    # tool-surface is opportunistic, not the pinned tier: only entries this event
+    # actually evidenced (base > 0) belong — a floor-bypassing pin would otherwise
+    # ride through on every tool call.
+    selected = [s for s in select([s for s in scored if s.entry.id not in already])
+                if s.base > 0]
+    return selected
+
+
+def _bash_hook(p: dict, tin: dict) -> str | None:
+    from portaw.memory import observations, sessionlog
+
+    err = _error_text(p.get("tool_response"))
+    if not err:
+        return None
+    sid = p.get("session_id") or ""
+    selected = _recall_selected(err, None, p, sid)
+
+    # COVERAGE must be strict: an error-recall can fuzzy-match a lesson on shared
+    # generic tokens ("command not found"), so a `foobar` error must NOT count the
+    # `python` lesson as its cover. A lesson covers this error only if the failing
+    # program token actually appears in it — otherwise it's un-lessoned (→ nudge).
+    command = str(tin.get("command") or "")
+    prog = observations.program(command)
+    covering = _covering(selected, prog)
+
+    # ledger: count this failure; link the genuinely-covering lesson (if any) so its
+    # effectiveness can be measured later (confidence.py / `memory observations`).
+    rec = observations.record(command, err, lesson_id=covering.entry.id if covering else "")
+
+    if covering:
+        from portaw.memory.inject import format_memory
+        if sid:
+            sessionlog.mark(sid, [covering.entry.id])
+        return _envelope("PostToolUse", format_memory([covering]))
+
+    # no lesson covers a repeated error → nudge to capture (once per sig per session)
+    if rec and not rec.get("lesson_id") and rec.get("count", 0) >= _NUDGE_MIN:
+        key = f"nudge:{rec['sig']}"
+        if not sid or key not in sessionlog.seen(sid):
+            if sid:
+                sessionlog.mark(sid, [key])
+            return _envelope("PostToolUse", _nudge_block(rec["sig"], rec["count"]))
+    return None
+
+
+def _edit_hook(p: dict, tin: dict) -> str | None:
+    from portaw.memory import sessionlog
+    from portaw.memory.anchors import AnchorQuery
+    from portaw.memory.inject import format_memory
+
+    fp = str(tin.get("file_path") or tin.get("notebook_path") or "")
+    if not fp:
+        return None
+    sid = p.get("session_id") or ""
+    selected = _recall_selected("", AnchorQuery(paths=(fp,)), p, sid)
+    if not selected:
+        return None
+    if sid:
+        sessionlog.mark(sid, [s.entry.id for s in selected])
+    return _envelope("PostToolUse", format_memory(selected))

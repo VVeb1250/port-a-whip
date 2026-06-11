@@ -89,8 +89,13 @@ class MemoryEntry:
         ).strip()
 
     def bumped(self, *, last_seen: str) -> "MemoryEntry":
-        """Return a copy with recurrence+1 and refreshed last_seen (immutable bump)."""
-        return replace(self, recurrence=self.recurrence + 1, last_seen=last_seen)
+        """Return a copy with recurrence+1, refreshed last_seen, and confidence
+        reinforced (a confirmed recurrence is evidence the lesson is real — see
+        confidence.py; saturating, so repeated hits never assert certainty)."""
+        from portaw.memory.confidence import reinforced
+
+        return replace(self, recurrence=self.recurrence + 1, last_seen=last_seen,
+                       confidence=reinforced(self.confidence))
 
     @classmethod
     def new(cls, etype: str, body: str, scope: str, **kw) -> "MemoryEntry":

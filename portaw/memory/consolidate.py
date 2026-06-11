@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import date
 
+from portaw.memory.confidence import NEUTRAL, decayed
 from portaw.memory.retrieval import RetrievalConfig, activation
 from portaw.memory.schema import MemoryEntry
 
@@ -19,6 +20,7 @@ from portaw.memory.schema import MemoryEntry
 class ConsolidationConfig:
     promote_min_recurrence: int = 3    # a project lesson recurred this much → widen scope
     archive_activation: float = 0.15   # below this (and unpinned) → archived as stale
+    decay_activation: float = 0.5      # below this → a never-proven seed's confidence eases down
     protect_confidence: float = 0.9    # a vouched-this-strongly lesson never auto-archives
     activation_cfg: RetrievalConfig = RetrievalConfig()
 
@@ -90,8 +92,14 @@ def consolidate(
         protected = e.pinned or e.confidence >= cfg.protect_confidence
         if not protected and act < cfg.archive_activation:
             archived.append(e)
-        else:
-            kept.append(e)
+            continue
+        # a seed that never proved itself (recurrence 1) yet has gone stale eases its
+        # confidence toward neutral — kills the "frozen 0.9 that never recurred"
+        # overconfidence without touching pinned or recurrence-proven lessons.
+        if (not e.pinned and e.recurrence <= 1
+                and act < cfg.decay_activation and e.confidence > NEUTRAL):
+            e = replace(e, confidence=decayed(e.confidence))
+        kept.append(e)
     # sort by activation ONLY (never compare the entry — see [sweep-tuple-sort])
     kept.sort(key=lambda e: activation(e, today, cfg.activation_cfg), reverse=True)
     return ConsolidationResult(kept, archived, merged_count, promoted_count)

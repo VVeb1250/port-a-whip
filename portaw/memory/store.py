@@ -56,21 +56,26 @@ def _read_jsonl(path: Path) -> list[MemoryEntry]:
     return entries
 
 
-def _write_jsonl(path: Path, entries: list[MemoryEntry]) -> None:
-    """Atomic write: serialize to a temp file in the same dir, then os.replace."""
+def _write_jsonl_raw(path: Path, lines: list[str]) -> None:
+    """Atomic write of pre-serialized jsonl lines (shared by the entry store + the
+    observation ledger). pid-suffixed tmp + replace-retry → no interleave, no
+    half-written file even under concurrent Stop hooks."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as e:
         raise MemoryStoreError(f"cannot create store dir {path.parent}: {e}") from e
-    body = "\n".join(json.dumps(e.to_raw(), ensure_ascii=False) for e in entries)
-    # pid-suffixed tmp: two concurrent writers (Stop hooks) never interleave into
-    # the SAME tmp file; last os.replace wins whole, store never half-written.
+    body = "\n".join(lines)
     tmp = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
     tmp.write_text(body + ("\n" if body else ""), encoding="utf-8")
     try:
         _replace_with_retry(tmp, path)
     finally:
         tmp.unlink(missing_ok=True)  # leftover only when replace failed
+
+
+def _write_jsonl(path: Path, entries: list[MemoryEntry]) -> None:
+    """Atomic write of MemoryEntries."""
+    _write_jsonl_raw(path, [json.dumps(e.to_raw(), ensure_ascii=False) for e in entries])
 
 
 def _replace_with_retry(tmp: Path, path: Path, attempts: int = 3) -> None:
