@@ -90,6 +90,22 @@ def test_install_efficiency_starter_codex_installs_semble_skips_codegraph(tmp_pa
     assert "codegraph" not in doc["mcp_servers"]
 
 
+def test_remove_skips_tool_anchored_to_other_host(tmp_host):
+    """semble is anchored to codex/gemini — if the user put it in their CC config
+    themselves, removing efficiency-starter on CC must NOT delete it (paw never
+    installed it here; symmetric with install_set's alt_skipped)."""
+    install_mod.install_set("efficiency-starter", "claude-code")
+    data = json.loads(tmp_host.path.read_text())
+    data["mcpServers"]["semble"] = {"command": "semble", "args": ["mcp"]}  # user's own
+    tmp_host.path.write_text(json.dumps(data))
+
+    res = install_mod.remove_set("efficiency-starter", "claude-code")
+    removed = [t for t, _ in res.removed]
+    assert "codegraph" in removed and "semble" not in removed
+    after = json.loads(tmp_host.path.read_text())
+    assert "semble" in after["mcpServers"]  # user's manual install survives
+
+
 def test_resolve_host_rejects_unknown():
     with pytest.raises(ValueError, match="unknown host"):
         install_mod.resolve_host("emacs")

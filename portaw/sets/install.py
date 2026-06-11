@@ -151,6 +151,11 @@ def remove_set(set_name: str, host: str | None) -> RemoveResult:
     res = RemoveResult(set_name=cs.name, host=hid)
     for m in cs.mcp:
         name = m["tool"]
+        # symmetric with install_set: a tool anchored to ANOTHER host was never
+        # installed here by paw — if its name is in this config, the user put it
+        # there for their own reasons; removing it would be a surprise deletion.
+        if not _for_host(m, hid):
+            continue
         if is_installed(hc, name):
             backup = unpatch_host(hc, name)
             res.removed.append((name, backup))

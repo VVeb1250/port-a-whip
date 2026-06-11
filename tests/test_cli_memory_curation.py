@@ -92,6 +92,60 @@ def test_rm_unknown_id_fails_loudly(monkeypatch):
     assert res.exit_code != 0
 
 
+def _patch_project_store(monkeypatch, state):
+    monkeypatch.setattr(store, "load_project", lambda root=None: list(state))
+    monkeypatch.setattr(store, "save_project",
+                        lambda entries, root=None: (state.clear(), state.extend(entries)))
+
+
+def _project(body, **kw):
+    kw.setdefault("scope", "project")
+    kw.setdefault("applicability", "project:x")
+    return MemoryEntry.new("project", body, **kw)
+
+
+def test_rm_and_pin_reach_project_store(monkeypatch):
+    state = [_project("decision: tomlkit for TOML writes")]
+    _patch_project_store(monkeypatch, state)
+    runner = CliRunner()
+    short = state[0].id[:6]
+
+    res = runner.invoke(cli, ["memory", "pin", short, "--store", "project"])
+    assert res.exit_code == 0 and state[0].pinned is True
+
+    res = runner.invoke(cli, ["memory", "rm", short, "--store", "project"])
+    assert res.exit_code == 0 and state == []
+
+
+def test_add_project_rejects_explicit_applicability(monkeypatch):
+    """--applicability with --type project was silently overridden — now it refuses."""
+    res = CliRunner().invoke(
+        cli, ["memory", "add", "x", "--type", "project", "--applicability", "stack:python"])
+    assert res.exit_code != 0
+    assert "lessons only" in res.output
+
+
+def test_verify_renders_alt_status_and_passes_host(monkeypatch):
+    """KeyError 'alt' regression: verify crashed on host-anchored tools (live bug)."""
+    import portaw.sets.healthcheck as hc_mod
+    from portaw.sets.healthcheck import SetHealth, ToolHealth
+
+    seen = {}
+
+    def fake_check(set_name, host=None):
+        seen["host"] = host
+        return SetHealth(set_name, (
+            ToolHealth("codegraph", "mcp", "ok", "on PATH"),
+            ToolHealth("semble", "mcp", "alt", "host-anchored to codex/gemini"),
+        ))
+
+    monkeypatch.setattr(hc_mod, "check_set", fake_check)
+    res = CliRunner().invoke(cli, ["verify", "efficiency-starter", "--host", "codex"])
+    assert res.exit_code == 0                    # alt never fails the gate
+    assert "alt" in res.output and "PASS" in res.output
+    assert seen["host"] == "codex"
+
+
 def test_consolidate_archives_before_overwriting_store(monkeypatch):
     """Crash-safety order: if append_archive fails, the store must be UNTOUCHED
     (reverse order would have already dropped the archived lessons forever)."""

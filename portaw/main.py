@@ -146,16 +146,25 @@ def remove(set_name: str, host: str | None):
 
 @cli.command()
 @click.argument("set_name")
-def verify(set_name: str):
+@click.option("--host", default=None, help="Target host (claude-code/codex/gemini) — "
+              "resolves host-conditional anchors. Default: auto-detect.")
+def verify(set_name: str, host: str | None):
     """§10 health-check: is each tool in the set actually reachable on PATH?"""
     from portaw.sets.healthcheck import check_set
+    from portaw.sets.install import resolve_host
     from portaw.sets.loader import SetsError
 
     try:
-        h = check_set(set_name)
-    except SetsError as e:
+        if host is None:
+            found = detect_hosts()
+            # single detected host wins; ambiguous/none keeps the historical default
+            hid = found[0] if len(found) == 1 else "claude-code"
+        else:
+            hid = resolve_host(host)
+        h = check_set(set_name, hid)  # type: ignore[arg-type]
+    except (SetsError, ValueError) as e:
         raise click.ClickException(str(e))
-    mark = {"ok": "✓", "missing": "✗", "config-only": "·"}
+    mark = {"ok": "✓", "missing": "✗", "config-only": "·", "alt": "↷"}
     for t in h.tools:
         click.echo(f"  {mark[t.status]} {t.tool} ({t.kind}): {t.status} — {t.detail}")
     click.echo(f"\ngate: {'PASS' if h.ok else 'FAIL — install missing tools'}")
@@ -412,7 +421,9 @@ def memory_list(etype: str | None):
 @click.option("--type", "etype", type=click.Choice(["lesson", "project"]), default="lesson")
 @click.option("--scope", type=click.Choice(["global", "project"]), default=None,
               help="Default: global for lessons, project for project-memory.")
-@click.option("--applicability", default="universal", help="universal | stack:<x> | project:<id>.")
+@click.option("--applicability", default=None,
+              help="universal | stack:<x> | project:<id> (lessons only — a project "
+                   "entry is always scoped to the cwd project).")
 @click.option("--trigger", "triggers", multiple=True, help="Router trigger term(s).")
 @click.option("--symbol", "symbols", multiple=True, help="Anchor symbol(s).")
 @click.option("--path", "paths", multiple=True, help="Anchor path(s).")
@@ -421,7 +432,11 @@ def memory_list(etype: str | None):
               help="Manual adds default to 0.9 (a deliberate human assertion = trusted "
                    "for injection even at universal scope). Lower it for a tentative note.")
 def memory_add(body, etype, scope, applicability, triggers, symbols, paths, pin, confidence):
-    """Add a memory entry (compressed one-liner body)."""
+    """Add a memory entry (compressed one-liner body).
+
+    Typing this command IS the human confirm the project-write gate asks for
+    (gate.accepts: project writes need explicit confirmation — a deliberate
+    `memory add --type project` satisfies it by construction)."""
     from datetime import date
 
     from portaw.memory.anchors import Anchors
@@ -436,10 +451,17 @@ def memory_add(body, etype, scope, applicability, triggers, symbols, paths, pin,
 
     from pathlib import Path
 
+    if etype == "project" and applicability is not None:
+        # refuse rather than silently override — the flag would be a no-op lie
+        raise click.ClickException(
+            "--applicability applies to lessons only; a project entry is always "
+            f"scoped to project:{Path.cwd().name}"
+        )
     scope = scope or ("global" if etype == "lesson" else "project")
     entry = MemoryEntry.new(
         etype, " ".join(body), scope,
-        applicability=applicability if etype == "lesson" else f"project:{Path.cwd().name}",
+        applicability=(applicability or "universal") if etype == "lesson"
+        else f"project:{Path.cwd().name}",
         trigger_terms=tuple(triggers),
         anchors=Anchors(symbols=tuple(symbols), paths=tuple(paths)),
         pinned=pin, confidence=confidence,
@@ -453,20 +475,32 @@ def memory_add(body, etype, scope, applicability, triggers, symbols, paths, pin,
     click.echo(f"added [{etype}] {entry.id}: {entry.body[:60]}")
 
 
+def _curation_store(which: str):
+    """(load, save) pair for a curation target: global lessons or this repo's
+    project-memory — pin/rm work on both, no hand-editing jsonl."""
+    from portaw.memory.store import load_lessons, load_project, save_lessons, save_project
+
+    if which == "project":
+        return load_project, save_project
+    return load_lessons, save_lessons
+
+
 @memory.command("pin")
 @click.argument("entry_id")
 @click.option("--unpin", is_flag=True, help="Remove the always-on flag instead.")
-def memory_pin(entry_id: str, unpin: bool):
-    """Pin/unpin an existing lesson by id (always-on tier — bypasses the recall floor)."""
+@click.option("--store", "which", type=click.Choice(["global", "project"]), default="global",
+              help="Which store to curate (default: global lessons).")
+def memory_pin(entry_id: str, unpin: bool, which: str):
+    """Pin/unpin an existing entry by id (always-on tier — bypasses the recall floor)."""
     from dataclasses import replace
 
-    from portaw.memory.store import load_lessons, save_lessons
-
-    entries = load_lessons()
+    load, save = _curation_store(which)
+    entries = load()
     hit = next((e for e in entries if e.id == entry_id or e.id.startswith(entry_id)), None)
     if hit is None:
-        raise click.ClickException(f"no lesson with id {entry_id!r} (see `portaw memory list`)")
-    save_lessons([replace(e, pinned=not unpin) if e.id == hit.id else e for e in entries])
+        raise click.ClickException(
+            f"no {which} entry with id {entry_id!r} (see `portaw memory list`)")
+    save([replace(e, pinned=not unpin) if e.id == hit.id else e for e in entries])
     click.echo(f"{'unpinned' if unpin else 'pinned ★'} {hit.id}: {hit.body[:60]}")
 
 
@@ -544,16 +578,17 @@ def memory_observations(min_count: int):
 
 @memory.command("rm")
 @click.argument("entry_ids", nargs=-1, required=True)
-def memory_rm(entry_ids: tuple[str, ...]):
-    """Remove lesson(s) by id (curation — e.g. a superseded duplicate)."""
-    from portaw.memory.store import load_lessons, save_lessons
-
-    entries = load_lessons()
+@click.option("--store", "which", type=click.Choice(["global", "project"]), default="global",
+              help="Which store to curate (default: global lessons).")
+def memory_rm(entry_ids: tuple[str, ...], which: str):
+    """Remove entr(ies) by id (curation — e.g. a superseded duplicate)."""
+    load, save = _curation_store(which)
+    entries = load()
     drop = {e.id for e in entries for want in entry_ids
             if e.id == want or e.id.startswith(want)}
     if not drop:
-        raise click.ClickException(f"no lesson matches {', '.join(entry_ids)}")
-    save_lessons([e for e in entries if e.id not in drop])
+        raise click.ClickException(f"no {which} entry matches {', '.join(entry_ids)}")
+    save([e for e in entries if e.id not in drop])
     click.echo(f"removed {len(drop)}: {', '.join(sorted(drop))}")
 
 
