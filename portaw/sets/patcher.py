@@ -133,18 +133,21 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8") if path.exists() else ""
 
 
-def _mtime_ns(path: Path) -> int | None:
-    try:
-        return path.stat().st_mtime_ns
-    except OSError:
-        return None
-
-
-def _guard_unchanged(path: Path, before: int | None) -> None:
+def _guard_unchanged(path: Path, before_text: str) -> None:
     """The host (e.g. a running Claude Code) rewrites its own config; if the file
     changed between our read and our write, writing would silently destroy the
-    host's update — refuse instead of clobbering."""
-    if _mtime_ns(path) != before:
+    host's update — refuse instead of clobbering.
+
+    Compares CONTENT, not mtime: mtime granularity is coarse on some filesystems
+    (a read + sub-tick rewrite can share one st_mtime_ns), so an mtime guard
+    silently misses the race. Content also avoids false positives (a touch that
+    leaves the data identical is no clobber risk). Reads the file directly rather
+    than via _read so a monkeypatched/instrumented _read can't re-trigger here."""
+    try:
+        current = path.read_text(encoding="utf-8") if path.exists() else ""
+    except OSError:
+        return  # unreadable now → let the write attempt surface the real error
+    if current != before_text:
         raise PatchError(
             f"{path} changed while patching (is the host running?) — re-run the command"
         )
@@ -188,7 +191,6 @@ def patch_host(hc: HostConfig, name: str, entry: dict) -> Path | None:
 
     Returns the backup path (None if config file was created fresh).
     """
-    before = _mtime_ns(hc.path)
     text = _read(hc.path)
     if hc.fmt == "json":
         try:
@@ -212,7 +214,7 @@ def patch_host(hc: HostConfig, name: str, entry: dict) -> Path | None:
             raise PatchError(f"TOML patch invalid for {hc.path}: {e}") from e
 
     try:
-        _guard_unchanged(hc.path, before)
+        _guard_unchanged(hc.path, text)
         backup = _backup(hc.path) if hc.path.exists() else None
         hc.path.parent.mkdir(parents=True, exist_ok=True)
         hc.path.write_text(out_text, encoding="utf-8")
@@ -224,7 +226,6 @@ def patch_host(hc: HostConfig, name: str, entry: dict) -> Path | None:
 def unpatch_host(hc: HostConfig, name: str) -> Path | None:
     """Remove server `name`. Backup first. True no-op (no rewrite) if absent —
     a rewrite would reformat the whole config for nothing."""
-    before = _mtime_ns(hc.path)
     text = _read(hc.path)
     if not text.strip():
         return None
@@ -243,7 +244,7 @@ def unpatch_host(hc: HostConfig, name: str) -> Path | None:
             return None
         out_text = remove_toml(text, name)
     try:
-        _guard_unchanged(hc.path, before)
+        _guard_unchanged(hc.path, text)
         backup = _backup(hc.path) if hc.path.exists() else None
         hc.path.parent.mkdir(parents=True, exist_ok=True)
         hc.path.write_text(out_text, encoding="utf-8")
