@@ -5,7 +5,26 @@
 > can't drive, or real usage over days. Each item = why + exact steps + where the
 > result lands. Tick when done.
 >
-> Last updated 2026-06-12. Most-leverage first.
+> Last updated 2026-06-13. Most-leverage first.
+>
+> ## 13. [ ] L3 memoir-edges (R13) — real-ONNX + live-transcript dogfood
+>
+> Built 2026-06-13 (346 tests, all injected-encoder/synthetic): typed edges (superseded_by/
+> contradicts/caused_by/related) + suppress/contradict/1-hop-fan-out in recall + fuzzy
+> `related` seeding at capture (+reciprocal) + auto-`superseded_by` in consolidate + wake-pack
+> project digest at SessionStart + `memory link` CLI + dream cadence (`consolidate --every`).
+>
+> NEEDS a real run (tests inject a fake encoder, never the live MiniLM):
+> 1. **embed-seeded edges on the REAL store** — `memory consolidate` on the live store;
+>    confirm `supersede_pairs` fires sane edges (no over-linking). Tune `DEFAULT_SUPERSEDE_HI`
+>    (0.90) + related band (0.55–0.97) against real MiniLM cosines — synthetic vectors can't
+>    calibrate the threshold.
+> 2. **wake-pack live** — `memory inject-enable session`, fresh session in this repo, confirm
+>    the `📌 paw project memory` digest injects high-confidence project lines once, ≤150 tok.
+> 3. **recall suppression end-to-end** — after a real supersede edge, the stale lesson stops
+>    surfacing while its replacement is eligible.
+> 4. **`memory link` cross-store** — smoke-tested (link/phantom/edge-indicator/store-isolation);
+>    needs a live lesson→decision `contradicts` link confirming fan-out surfaces the decision.
 >
 > **▶ COPY-PASTE SHEET: `bench/RUN-PROMPTS.md`** — one ready-to-paste block per
 > remaining run (groups A-F), with per-block SETUP + trials + report-back. Open it,

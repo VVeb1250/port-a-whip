@@ -17,7 +17,13 @@ from datetime import date
 
 from portaw.kernel.ranking import Capability, RouteConfig, route
 from portaw.memory.anchors import AnchorQuery, overlap
-from portaw.memory.schema import MemoryEntry
+from portaw.memory.schema import (
+    CAUSED_BY,
+    CONTRADICTS,
+    RELATED,
+    SUPERSEDED_BY,
+    MemoryEntry,
+)
 
 
 @dataclass(frozen=True)
@@ -34,6 +40,8 @@ class RetrievalConfig:
     base_floor: float = 0.12        # below this combined base → dropped (silence)
     decay_lambda: float = 0.03      # recency half-life ≈ ln2/λ ≈ 23 days
     unknown_age_days: int = 30      # last_seen missing → treated this stale
+    expand_factor: float = 0.5      # 1-hop related/caused_by ride at this × parent score
+    expand_top: int = 5             # only fan out from the top-N surfaced (bound cost)
 
 
 @dataclass(frozen=True)
@@ -134,4 +142,61 @@ def recall(
                    relevance=rel, anchor=anc, activation=act, base=base)
         )
     scored.sort(key=lambda s: -s.score)
-    return scored
+    return _apply_relations(scored, eligible, cfg, today)
+
+
+def _apply_relations(
+    scored: list[Scored], eligible: list[MemoryEntry],
+    cfg: RetrievalConfig, today: date,
+) -> list[Scored]:
+    """The memoir half: typed edges reshape the ranked list (no-op on legacy data
+    with no relations). Three passes, each a correctness or smartness filter:
+
+      superseded_by → drop the stale entry when its replacement is also eligible
+                      (the #1 L3 risk is a confidently-wrong stale lesson; an
+                      explicit edge retires it the moment the fix is recorded).
+      contradicts   → keep only the higher-ranked of a disagreeing pair (never
+                      inject two lessons that tell the agent opposite things).
+      related/caused_by → 1-hop fan-out: a surfaced lesson pulls its root cause /
+                      associate in at a discount, so recall connects instead of
+                      isolating — within the same budget the inject layer caps.
+    """
+    by_id = {e.id: e for e in eligible}
+    eligible_ids = set(by_id)
+
+    # pass 1: suppress superseded (replacement present and eligible)
+    kept: list[Scored] = []
+    suppressed: set[str] = set()
+    for s in scored:
+        if any(t in eligible_ids for t in s.entry.targets(SUPERSEDED_BY)):
+            suppressed.add(s.entry.id)
+            continue
+        kept.append(s)
+
+    # pass 2: drop the weaker side of a contradiction (kept is score-desc already)
+    survivors: list[Scored] = []
+    survivor_ids: set[str] = set()
+    for s in kept:
+        if any(t in survivor_ids for t in s.entry.targets(CONTRADICTS)):
+            continue  # a higher-ranked entry it contradicts already won
+        survivors.append(s)
+        survivor_ids.add(s.entry.id)
+
+    # pass 3: 1-hop fan-out from the top survivors (no recursion, no re-expand)
+    present = set(survivor_ids)
+    additions: list[Scored] = []
+    for s in survivors[: cfg.expand_top]:
+        for rel in (CAUSED_BY, RELATED):
+            for tid in s.entry.targets(rel):
+                tgt = by_id.get(tid)
+                if tgt is None or tid in present or tid in suppressed:
+                    continue
+                present.add(tid)
+                act = activation(tgt, today, cfg)
+                additions.append(Scored(
+                    score=s.score * cfg.expand_factor, entry=tgt,
+                    relevance=0.0, anchor=0.0, activation=act, base=0.0,
+                ))
+    out = survivors + additions
+    out.sort(key=lambda s: -s.score)
+    return out

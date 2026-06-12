@@ -12,9 +12,13 @@ paw L3 = a **high-precision, compressed, silence-biased, self-tuning recall laye
 that injects *negative knowledge* (and project rationale) at the exact moment of
 relevance — with **all machinery off the per-prompt context budget**.
 
-It is **NOT** general agent memory (jcode does intra-host general memory better),
-**NOT** a RAG engine, **NOT** a cloud service. The two non-negotiable axes:
-**cross-host portability + mistake-surfacing.** Drift off these → paw is redundant.
+It is **NOT** a hosted general-memory service, **NOT** a RAG engine, **NOT** a cloud
+service. The hard lines that don't move: **cross-host portability + no-API/no-daemon/
+no-cloud.** Within those, the job is **make the agent smarter per injected token** —
+mistake-surfacing, decision grounding (anti-hallucination on short context), memory
+connection (typed edges, §4.1), lifting weak/local models with distilled knowledge.
+(Scope broadened by owner 2026-06-13; the old "mistake-surfacing ONLY" axis is
+superseded — the constraint is the deps, not the breadth.)
 
 ---
 
@@ -34,6 +38,12 @@ Four jobs, in priority:
 2. **Compactness** — each entry is tiny (R8).
 3. **Silence** — inject *nothing* when nothing is relevant (the common case).
 4. **Off-budget machinery** — store/index/consolidate never touch the prompt budget.
+
+**Silence-bias governs RELEVANCE, not connection.** The fear is *wrong-topic* tokens
+(context rot), not *associative* tokens. So additive 1-hop fan-out (a relevant lesson
+pulling its root cause / related entry, §4.1) is in-bounds — it rides inside the same
+budget cap and only fires off an already-relevant hit. Bias toward silence on "is this
+on-topic," not on "may memories connect."
 
 ---
 
@@ -158,8 +168,10 @@ English prompt). TF-IDF (tier-1) catches lexical overlap; embedding catches para
   provenance,                    // measured | calculated | vendor | estimated | neutral
   confidence,                    // 0..1
   recurrence, last_seen,         // ACT-R activation substrate (§5)
+  misses,                        // error recurred AFTER this lesson existed (§9 effectiveness)
   scope: "global" | "project",
-  source: "hook" | "user" | "agent",
+  source: "hook" | "user" | "agent" | "sync",
+  relations: [ { rel, target } ],  // typed edges to other entries (the memoir half, §4.1)
 }
 ```
 
@@ -172,6 +184,37 @@ the agent explicitly recalls it.
 **Gold standard already exists** = the user's `mistakes-index.md` format:
 `[SEV] [id] trigger → fix (xN, date)` ≈ **15 tokens carries a whole lesson.** paw memory
 adopts this verbatim. Inject the 15-token pointer, not a 200-token prose blob.
+
+### R13 — typed edges (the memoir half: connection, not just storage)
+
+Inspired by ICM's memoir layer + OpenSpace's version DAG: humans are smart because memory
+*connects*. paw stores edges between EXISTING entries (never a separate concept-node graph —
+that's graphify territory), small + retrieval-shaping only:
+
+| rel | meaning | retrieval effect |
+|---|---|---|
+| `superseded_by` | this entry's fix is obsolete; target replaces it | **suppress** this entry when target is eligible (kills "confidently-wrong stale lesson", the #1 L3 risk) |
+| `contradicts` | the two disagree | keep only the higher-ranked; never inject the pair |
+| `caused_by` | this is a symptom of root-cause target | **1-hop fan-out**: surface target alongside |
+| `related` | soft associative link | 1-hop fan-out |
+
+- **Who writes which** (poison-safe, ties to §7): AUTO capture seeds only `related` — an
+  *additive* edge (fan-out can ADD context, never silence). The **suppressive** edges
+  (`superseded_by`/`contradicts`) are reserved for **consolidation** (sees recurrence over
+  time) and **manual `link`** — so a noisy near-dup can never retire a good lesson.
+- **target = content-hash id** → edges survive cross-host sync (ids are stable) and can
+  cross stores (a lesson can point at the project decision it violates).
+- edge seeding uses embedding similarity at capture (band [0.55, 0.97); ≥0.97 = same lesson,
+  no edge; content-hash still owns exact dedup — we never fold bodies, the id IS identity).
+
+### 4.1 (impl note) — edges live on the entry, fan-out is bounded
+
+`MemoryEntry.relations` + `with_relation`/`targets` (pure, schema.py). Retrieval applies them
+in `_apply_relations`: suppress-superseded → drop-contradiction → 1-hop fan-out from the top-N
+survivors (no recursion, no re-expand), additive entries ride at `expand_factor × parent`.
+No-op on legacy data (empty relations). This is the "fuse graph + vector" of §3 made concrete:
+the vector/lexical half surfaces an entry, the edges do the multi-hop the graph half promised —
+**with zero index build**, because the edges are just ids on the record.
 
 ---
 

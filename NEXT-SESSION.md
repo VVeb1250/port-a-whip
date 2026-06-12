@@ -62,18 +62,20 @@ Two opposing numbers: `delta_pct` (runtime saved, +) vs `idle_def_tokens` (alway
 axis (auditable > black-box). When a discriminator can't cleanly separate two candidates, articulate the
 REAL line — don't inherit "the drop-list said so."
 
-### L3 design decisions (don't relitigate — full design in docs/L3-DESIGN.md R1-R12)
+### L3 design decisions (stable defaults, NOT a gag order — see re-open rule)
+> **Re-open rule:** these are recorded so you don't relearn them the hard way — NOT a ban on new thinking. Re-open a decision when (a) the owner changes direction, or (b) new evidence appears that wasn't on the table when it was decided. The discipline: answer the ORIGINAL rationale first (it's written here for a reason), then move — don't silently forget it, don't silently obey it.
 - lesson = GLOBAL store + applicability tag (universal/stack/project) + auto-promote on cross-project recurrence; project = project-scoped; preference DEFERRED.
 - anchor backbone weighted → **path+symbol = primary** (zero-setup, every host); codegraph = present-only multi-hop bonus; **graphify DROPPED** (LLM init token too high); embedding = lazy/optional.
 - "better than RAG" = structured+tiered+consolidated+graph-anchored recall, NOT a vector engine. RAG-Anything REJECTED (cloud-API + framework swallows the layer + doc≠code domain).
-- ⚠️ **L3 axis NON-NEGOTIABLE = cross-host portability + mistake-surfacing**, NOT general agent memory (jcode does that better intra-host).
+- ⚠️ **L3 hard lines = cross-host portability + no-API/no-daemon/no-cloud** (don't move). **Scope broadened 2026-06-13** (owner): mistake-surfacing is one job, not the only one — also decision grounding, memory connection (typed edges), lifting weak/local models. NOT a hosted general-memory service. The line is the deps (no server/cloud), not the breadth.
 
 ---
 
-## Part 2 — Current state (2026-06-11)
+## Part 2 — Current state (2026-06-13)
 
 - **6 sets** in `registry/sets.json` (schema 0.3.1): efficiency-starter, secure-agent, context-quality, design-quality (DRAFT), web-research (DRAFT, CC measured), browser-automation (DRAFT).
-- **216 tests pass** (164 base L1-L3 + 52 live-inject/hardening). Router L2 live (CC + Codex; Gemini built, never fired live). token_profile v2 across all sets.
+- **346 tests pass** (216 base+hardening + 130 memoir-edges/wake-pack/sync/evidence-loops). Router L2 live (CC + Codex; Gemini built, never fired live). token_profile v2 across all sets.
+- **R13 memoir edges (2026-06-13):** typed `relations` (superseded_by/contradicts/caused_by/related) reshape recall (suppress/contradict-drop/fan-out, no-op legacy); capture seeds only additive `related` (poison-safe); suppressive edges only from consolidation (`supersede_pairs` 6 guards) or `memory link`. Wake-pack project digest at SessionStart (≤150 tok, anti-hallucination). Dream cadence user-set, OFF default. ⚠️ all R13 tests use injected encoder → real-ONNX dogfood = DOGFOOD-PENDING #13.
 - **All 3 layers built + dogfooded.** L3 = `portaw/memory/` (schema/store/retrieval/capture/harvest/detect/consolidate). Inject LIVE end-to-end via `integration/skill-router.py` (kernel-unify: ONE ranker, paw_block surfaces memory+sets).
 - **paw INSTALLED editable** (`pip install -e .`) → `portaw` on PATH; fallback `py -m portaw`. PyPI wheel REBUILT @ 6 sets (twine PASS), **alpha-HOLD (no upload)**.
 - codegraph index built for this repo. semble + tiktoken installed (measurement only, NOT runtime deps — runtime stays click + tomlkit).

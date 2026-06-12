@@ -1,6 +1,14 @@
 """MemoryEntry / Anchors schema tests — pure, no I/O."""
 
-from portaw.memory.schema import Anchors, MemoryEntry, make_id
+from portaw.memory.schema import (
+    CAUSED_BY,
+    RELATED,
+    SUPERSEDED_BY,
+    Anchors,
+    MemoryEntry,
+    Relation,
+    make_id,
+)
 
 
 def test_make_id_stable_for_same_normalized_body():
@@ -50,6 +58,47 @@ def test_bumped_increments_recurrence_and_is_immutable():
     b = e.bumped(last_seen="2026-06-10")
     assert b.recurrence == 2 and b.last_seen == "2026-06-10"
     assert e.recurrence == 1 and e.last_seen == ""  # original untouched
+
+
+def test_from_raw_tolerates_pre_relations_records():
+    """Records written before the relations field existed load with no edges."""
+    e = MemoryEntry.new("lesson", "old record", "global")
+    raw = e.to_raw()
+    del raw["relations"]
+    assert MemoryEntry.from_raw(raw).relations == ()
+
+
+def test_relation_roundtrip_preserves_edges():
+    e = MemoryEntry.new("lesson", "x", "global").with_relation(SUPERSEDED_BY, "abc123")
+    back = MemoryEntry.from_raw(e.to_raw())
+    assert back == e
+    assert back.targets(SUPERSEDED_BY) == ("abc123",)
+
+
+def test_with_relation_is_idempotent_and_immutable():
+    e = MemoryEntry.new("lesson", "x", "global")
+    once = e.with_relation(RELATED, "t1")
+    twice = once.with_relation(RELATED, "t1")  # same edge again
+    assert once.relations == (Relation(RELATED, "t1"),)
+    assert twice is once  # no duplicate, returns self
+    assert e.relations == ()  # original untouched
+
+
+def test_with_relation_rejects_self_edge_and_unknown_type():
+    e = MemoryEntry.new("lesson", "x", "global")
+    assert e.with_relation(SUPERSEDED_BY, e.id) is e   # self-edge ignored
+    assert e.with_relation("invented_rel", "t1") is e  # unknown type ignored
+
+
+def test_targets_filters_by_rel_type():
+    e = (
+        MemoryEntry.new("lesson", "x", "global")
+        .with_relation(CAUSED_BY, "root")
+        .with_relation(RELATED, "a")
+        .with_relation(RELATED, "b")
+    )
+    assert e.targets(CAUSED_BY) == ("root",)
+    assert set(e.targets(RELATED)) == {"a", "b"}
 
 
 def test_searchable_text_includes_body_triggers_symbols():

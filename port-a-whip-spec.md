@@ -5,6 +5,10 @@
 **status:** direction locked (1.5 — layer + curated sets), ready for build planning
 **supersedes:** 0.2 (router + own installer) → installer redundant, paw stands on existing installers. See §13.
 
+> **Living-deltas (newer than this 0.3 text, authoritative where they conflict — see CLAUDE.md meta-rule):**
+> - **2026-06-13** L3 axis broadened (owner): hard lines = cross-host portability + no-API/no-daemon/no-cloud; scope = whatever makes the agent smarter per injected token (mistake-surfacing + decision grounding + memory connection + lifting weak/local models), NOT a hosted general-memory service. The old "mistake-surfacing ONLY" framing is retired. Full design = docs/L3-DESIGN.md §0 + R13.
+> - **2026-06-13** L3 gained **typed edges** (memoir half, R13) + embedding-seeded `related` links at capture + user-configurable dream cadence (`memory consolidate --every`).
+
 ---
 
 ## 1. Vision

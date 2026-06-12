@@ -461,8 +461,62 @@ def memory_list(etype: str | None):
         return
     for e in sorted(entries, key=lambda x: -x.recurrence):
         pin = "★" if e.pinned else " "
+        edges = f" →{len(e.relations)}" if e.relations else ""
         click.echo(f"  {pin} {e.id} [{e.type:<7}] {e.applicability:<16} "
-                   f"×{e.recurrence:<3} {e.body[:60]}")
+                   f"×{e.recurrence:<3} {e.body[:60]}{edges}")
+
+
+@memory.command("link")
+@click.argument("src_id")
+@click.argument("rel", type=click.Choice(
+    ["related", "caused_by", "superseded_by", "contradicts"]))
+@click.argument("dst_id")
+def memory_link(src_id: str, rel: str, dst_id: str):
+    """Add a typed edge SRC --rel--> DST between two existing entries (R13).
+
+    The manual half of the memoir layer: a human can assert the suppressive edges
+    (superseded_by / contradicts) that auto-capture is forbidden to seed. Works
+    across stores (a lesson can point at the project decision it violates) — DST
+    only has to exist somewhere so recall can resolve it. Ids are short content
+    hashes (see `memory list`); a unique prefix is accepted."""
+    from portaw.memory.store import (
+        load_lessons,
+        load_project,
+        save_lessons,
+        save_project,
+    )
+
+    lessons, project = load_lessons(), load_project()
+
+    def _resolve(frag: str) -> str | None:
+        ids = [e.id for e in (*lessons, *project)]
+        if frag in ids:
+            return frag
+        hits = [i for i in ids if i.startswith(frag)]
+        if len(hits) == 1:
+            return hits[0]
+        if len(hits) > 1:
+            raise click.ClickException(f"ambiguous id prefix {frag!r} ({len(hits)} matches)")
+        return None
+
+    src, dst = _resolve(src_id), _resolve(dst_id)
+    if src is None:
+        raise click.ClickException(f"no entry matches src id {src_id!r}")
+    if dst is None:
+        raise click.ClickException(f"no entry matches dst id {dst_id!r} (edge to a "
+                                   "phantom id would be dead weight)")
+
+    for entries, save in ((lessons, save_lessons), (project, save_project)):
+        idx = next((k for k, e in enumerate(entries) if e.id == src), None)
+        if idx is None:
+            continue
+        linked = entries[idx].with_relation(rel, dst)
+        if linked is entries[idx]:
+            click.echo(f"edge {rel} already present (or self/invalid) — nothing changed")
+            return
+        save([*entries[:idx], linked, *entries[idx + 1:]])
+        click.echo(f"linked {src} --{rel}--> {dst}")
+        return
 
 
 @memory.command("add")
@@ -811,17 +865,42 @@ def memory_inject_disable(surface: str, host: str):
 
 @memory.command("consolidate")
 @click.option("--dry-run", is_flag=True, help="Show what would change without writing.")
-def memory_consolidate(dry_run: bool):
+@click.option("--every", "every", default=None, metavar="DAYS|session",
+              help="Set the auto-dream cadence (N days, or 'session' = every session end) and exit.")
+def memory_consolidate(dry_run: bool, every: str | None):
     """Async 'dream' pass: merge dups, promote, archive stale lessons."""
     from portaw.memory.consolidate import consolidate
     from portaw.memory.store import append_archive, load_lessons, save_lessons
 
+    if every is not None:
+        from portaw.memory.consolidate import set_dream_interval
+
+        if every.lower() == "session":
+            days = 0
+        else:
+            try:
+                days = int(every)
+            except ValueError:
+                raise click.ClickException(
+                    f"--every takes a day count or 'session', not {every!r}"
+                ) from None
+        set_dream_interval(days)
+        label = "every session end" if days == 0 else f"every {days} day(s)"
+        click.echo(f"dream cadence set: {label}")
+        return
+
     before = load_lessons()
-    res = consolidate(before)
+    try:
+        from portaw.memory.similarity import supersede_pairs
+
+        supersedes = supersede_pairs(before)
+    except Exception:
+        supersedes = []
+    res = consolidate(before, supersedes=supersedes)
     click.echo(
         f"lessons {len(before)} → kept {len(res.kept)} · "
         f"merged {res.merged_count} · promoted {res.promoted_count} · "
-        f"archived {len(res.archived)}"
+        f"superseded {res.superseded_count} · archived {len(res.archived)}"
     )
     if dry_run:
         click.echo("(dry-run — nothing written)")

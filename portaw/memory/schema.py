@@ -16,6 +16,16 @@ from dataclasses import dataclass, field, replace
 # applicability tags (lessons): how widely a lesson is eligible to fire (§2.1)
 UNIVERSAL = "universal"
 
+# typed edges between entries (the "memoir" half — connection makes recall smart
+# without storing more). Target = a content-hash id; edges survive cross-host sync
+# because ids are stable. The set is deliberately small — these are the relations
+# that change RETRIEVAL, not a general knowledge graph (that's graphify territory).
+SUPERSEDED_BY = "superseded_by"  # X's fix is obsolete; Y replaces it → suppress X when Y present
+CONTRADICTS = "contradicts"      # X and Y disagree → never inject the pair together; flag for curation
+CAUSED_BY = "caused_by"          # X is a symptom of root-cause Y → surface Y alongside X
+RELATED = "related"              # soft associative link → 1-hop fan-out on recall
+_REL_TYPES = frozenset({SUPERSEDED_BY, CONTRADICTS, CAUSED_BY, RELATED})
+
 
 def _norm(text: str) -> str:
     """Normalize a body for hashing/dedup: lowercase, collapse whitespace."""
@@ -63,6 +73,21 @@ class Anchors:
 
 
 @dataclass(frozen=True)
+class Relation:
+    """A typed edge from this entry to another (by content-hash id)."""
+
+    rel: str       # one of _REL_TYPES
+    target: str    # content-hash id of the other entry
+
+    @classmethod
+    def from_raw(cls, raw: dict) -> Relation:
+        return cls(rel=raw["rel"], target=raw["target"])
+
+    def to_raw(self) -> dict:
+        return {"rel": self.rel, "target": self.target}
+
+
+@dataclass(frozen=True)
 class MemoryEntry:
     """One memory record. `body` = compressed one-liner (R8)."""
 
@@ -81,6 +106,7 @@ class MemoryEntry:
     last_seen: str = ""             # ISO date (recency substrate)
     source: str = "user"            # "hook" | "user" | "agent" | "sync"
     pinned: bool = False            # always-on tier (only highest-ROI universal)
+    relations: tuple[Relation, ...] = ()  # typed edges to other entries (memoir half)
 
     @property
     def searchable_text(self) -> str:
@@ -88,6 +114,19 @@ class MemoryEntry:
         return " ".join(
             [self.body, " ".join(self.trigger_terms), " ".join(self.anchors.symbols)]
         ).strip()
+
+    def targets(self, rel: str) -> tuple[str, ...]:
+        """Ids this entry points to via `rel` (e.g. its superseded_by targets)."""
+        return tuple(r.target for r in self.relations if r.rel == rel)
+
+    def with_relation(self, rel: str, target: str) -> MemoryEntry:
+        """Return a copy with edge (rel → target) added. Idempotent; ignores a
+        self-edge and any unknown rel type (silence beats a poisoned graph)."""
+        if rel not in _REL_TYPES or target == self.id:
+            return self
+        if any(r.rel == rel and r.target == target for r in self.relations):
+            return self
+        return replace(self, relations=(*self.relations, Relation(rel, target)))
 
     def bumped(self, *, last_seen: str) -> MemoryEntry:
         """Return a copy with recurrence+1, refreshed last_seen, and confidence
@@ -121,6 +160,10 @@ class MemoryEntry:
             last_seen=raw.get("last_seen", ""),
             source=raw.get("source", "user"),
             pinned=bool(raw.get("pinned", False)),
+            relations=tuple(
+                Relation.from_raw(r) for r in raw.get("relations", [])
+                if isinstance(r, dict) and r.get("rel") and r.get("target")
+            ),
         )
 
     def to_raw(self) -> dict:
@@ -140,4 +183,5 @@ class MemoryEntry:
             "last_seen": self.last_seen,
             "source": self.source,
             "pinned": self.pinned,
+            "relations": [r.to_raw() for r in self.relations],
         }

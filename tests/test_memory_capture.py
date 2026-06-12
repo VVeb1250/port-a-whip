@@ -9,7 +9,7 @@ from portaw.memory.capture import (
     to_lesson,
 )
 from portaw.memory.gate import GateConfig, accepts, enters_hot, trusted
-from portaw.memory.schema import MemoryEntry
+from portaw.memory.schema import RELATED, MemoryEntry
 
 TODAY = "2026-06-10"
 
@@ -122,3 +122,59 @@ def test_capture_stores_weak_universal_so_it_can_recur(monkeypatch, tmp_path):
     # stored (so recurrence can accumulate) but not yet trusted for injection
     assert res.stored and res.verdict.ok
     assert saved["e"][0].applicability == "universal"
+
+
+def test_capture_seeds_related_edge_to_similar_existing(monkeypatch, tmp_path):
+    from portaw.kernel import embed
+
+    existing = MemoryEntry.new("lesson", "used python3 → use py launcher", "global",
+                               applicability="universal", last_seen=TODAY)
+    saved = {}
+    monkeypatch.setattr(store, "global_dir", lambda: tmp_path / "mem")
+    monkeypatch.setattr(store, "load_lessons", lambda: [existing])
+    monkeypatch.setattr(store, "save_lessons", lambda entries: saved.update(e=entries))
+    # fake embed: new lesson sits at cos 0.90 to the existing one → in the related band
+    monkeypatch.setattr(embed, "available", lambda *a, **k: True)
+    monkeypatch.setattr(embed, "encode", lambda texts: [[1.0, 0.0], [0.9, 0.4358899]])
+
+    sig = FailureSignal(trigger="ran python", fix="use py", env_level=True, confidence=0.8)
+    res = capture(sig, "paw", today=TODAY)
+    assert res.stored
+    new = saved["e"][-1]  # appended after the existing one
+    assert existing.id in new.targets(RELATED)  # auto-seeded associative edge
+
+
+def test_capture_seeds_reciprocal_related_edge(monkeypatch, tmp_path):
+    from portaw.kernel import embed
+
+    existing = MemoryEntry.new("lesson", "used python3 → use py launcher", "global",
+                               applicability="universal", last_seen=TODAY)
+    saved = {}
+    monkeypatch.setattr(store, "global_dir", lambda: tmp_path / "mem")
+    monkeypatch.setattr(store, "load_lessons", lambda: [existing])
+    monkeypatch.setattr(store, "save_lessons", lambda entries: saved.update(e=entries))
+    monkeypatch.setattr(embed, "available", lambda *a, **k: True)
+    monkeypatch.setattr(embed, "encode", lambda texts: [[1.0, 0.0], [0.9, 0.4358899]])
+
+    sig = FailureSignal(trigger="ran python", fix="use py", env_level=True, confidence=0.8)
+    res = capture(sig, "paw", today=TODAY)
+    by_id = {e.id: e for e in saved["e"]}
+    # new → old (seeded) AND old → new (reciprocal) — the association is navigable both ways
+    assert by_id[existing.id].id in by_id[res.entry.id].targets(RELATED)
+    assert res.entry.id in by_id[existing.id].targets(RELATED)
+
+
+def test_capture_seeds_no_edge_when_embed_unavailable(monkeypatch, tmp_path):
+    from portaw.kernel import embed
+
+    existing = MemoryEntry.new("lesson", "some other lesson", "global", last_seen=TODAY)
+    saved = {}
+    monkeypatch.setattr(store, "global_dir", lambda: tmp_path / "mem")
+    monkeypatch.setattr(store, "load_lessons", lambda: [existing])
+    monkeypatch.setattr(store, "save_lessons", lambda entries: saved.update(e=entries))
+    monkeypatch.setattr(embed, "available", lambda *a, **k: False)  # tier-2 off
+
+    sig = FailureSignal(trigger="ran python", fix="use py", env_level=True, confidence=0.8)
+    res = capture(sig, "paw", today=TODAY)
+    assert res.stored
+    assert saved["e"][-1].relations == ()  # embed off → exactly today's behaviour

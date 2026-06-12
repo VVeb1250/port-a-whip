@@ -63,23 +63,27 @@ def run_session_hook(stdin_text: str | None = None) -> str | None:
     try:
         from portaw.memory import sessionlog
         from portaw.memory.context import host_context
-        from portaw.memory.inject import format_session, session_select
-        from portaw.memory.store import load_lessons
+        from portaw.memory.inject import format_session, project_digest, session_select
+        from portaw.memory.store import load_lessons, load_project
 
         p = _payload(stdin_text)
         sid = p.get("session_id") or ""
+        cwd = p.get("cwd") or None
+        ctx = host_context(cwd)
         if p.get("source") in ("compact", "clear"):
             sessionlog.reset(sid)  # earlier injects got summarized — pins re-fire
 
-        selected = session_select(load_lessons(), ctx=host_context(p.get("cwd") or None))
+        selected = session_select(load_lessons(), ctx=ctx)
+        digest = project_digest(load_project(cwd), ctx=ctx)  # the wake-pack
         if sid:
             already = sessionlog.seen(sid)
             selected = [e for e in selected if e.id not in already]
-        if not selected:
+            digest = [e for e in digest if e.id not in already]
+        if not selected and not digest:
             return None
         if sid:
-            sessionlog.mark(sid, [e.id for e in selected])
-        return _envelope("SessionStart", format_session(selected))
+            sessionlog.mark(sid, [e.id for e in (*selected, *digest)])
+        return _envelope("SessionStart", format_session(selected, digest))
     except Exception:
         return None
 

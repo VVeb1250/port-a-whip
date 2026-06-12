@@ -30,7 +30,7 @@ def test_all_memory_commands_registered():
 
     expected = {"recall", "list", "add", "pin", "rm", "export", "capture", "enable", "disable",
                 "status", "capture-hook", "session-hook", "tool-hook",
-                "inject-enable", "inject-disable", "consolidate", "init", "harvest"}
+                "inject-enable", "inject-disable", "consolidate", "init", "harvest", "link"}
     assert expected <= set(memory.commands)
 
 
@@ -73,6 +73,52 @@ def test_pin_unknown_id_fails_loudly(monkeypatch):
     _patch_store(monkeypatch, [])
     res = CliRunner().invoke(cli, ["memory", "pin", "deadbeef"])
     assert res.exit_code != 0
+
+
+# --- memory link (manual typed edges, R13) ---
+
+def _patch_both_stores(monkeypatch, lessons, project):
+    monkeypatch.setattr(store, "load_lessons", lambda: list(lessons))
+    monkeypatch.setattr(store, "save_lessons",
+                        lambda e: (lessons.clear(), lessons.extend(e)))
+    monkeypatch.setattr(store, "load_project", lambda root=None: list(project))
+    monkeypatch.setattr(store, "save_project",
+                        lambda e, root=None: (project.clear(), project.extend(e)))
+
+
+def test_link_adds_edge_by_prefix(monkeypatch):
+    from portaw.memory.schema import SUPERSEDED_BY
+
+    old = _lesson("old fix")
+    new = _lesson("new fix")
+    lessons = [old, new]
+    _patch_both_stores(monkeypatch, lessons, [])
+    res = CliRunner().invoke(
+        cli, ["memory", "link", old.id[:8], "superseded_by", new.id[:8]])
+    assert res.exit_code == 0
+    edited = next(e for e in lessons if e.id == old.id)
+    assert edited.targets(SUPERSEDED_BY) == (new.id,)
+
+
+def test_link_cross_store_lesson_to_project(monkeypatch):
+    from portaw.memory.schema import CONTRADICTS
+
+    lesson = _lesson("never use sessions here")
+    decision = MemoryEntry.new("project", "auth uses sessions", "project",
+                               applicability="project:paw")
+    lessons, project = [lesson], [decision]
+    _patch_both_stores(monkeypatch, lessons, project)
+    res = CliRunner().invoke(
+        cli, ["memory", "link", lesson.id, "contradicts", decision.id])
+    assert res.exit_code == 0
+    assert lessons[0].targets(CONTRADICTS) == (decision.id,)  # edge crosses stores
+
+
+def test_link_rejects_phantom_dst(monkeypatch):
+    a = _lesson("only one")
+    _patch_both_stores(monkeypatch, [a], [])
+    res = CliRunner().invoke(cli, ["memory", "link", a.id, "related", "deadbeef99"])
+    assert res.exit_code != 0 and "phantom" in res.output
 
 
 def test_rm_removes_by_prefix(monkeypatch):

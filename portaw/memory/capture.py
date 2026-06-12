@@ -14,7 +14,7 @@ from datetime import date
 
 from portaw.kernel.ranking import tokenize
 from portaw.memory.gate import GateConfig, Verdict, accepts
-from portaw.memory.schema import Anchors, MemoryEntry
+from portaw.memory.schema import RELATED, Anchors, MemoryEntry
 
 # env/shell-level mistakes recur across EVERY project → universal (§2.1)
 _ENV_KEYWORDS = {
@@ -111,6 +111,30 @@ class CaptureResult:
     stored: bool
 
 
+def _seed_related_edges(entry: MemoryEntry) -> MemoryEntry:
+    """Link this new lesson to its semantic near-neighbours (the memoir half).
+
+    AUTO capture seeds ONLY `related` — an additive edge: recall fan-out can pull
+    an associate in, never suppress one. The suppressive edges (superseded_by /
+    contradicts) stay reserved for consolidation (which sees recurrence over time)
+    and manual `link`, so a noisy near-dup can never silence a good lesson. Edges
+    point new→existing (bounded: one entry mutated, the new one). Fail-safe — any
+    trouble (embed off, read error) leaves the entry edge-free, exactly today."""
+    try:
+        from portaw.kernel import embed
+
+        if not embed.available():
+            return entry  # embed is the opt-in tier-2; off → no edges, no extra I/O
+        from portaw.memory.similarity import related_ids
+        from portaw.memory.store import load_lessons
+
+        for tid, _score in related_ids(entry, load_lessons()):
+            entry = entry.with_relation(RELATED, tid)
+        return entry
+    except Exception:
+        return entry
+
+
 def capture(
     signal: FailureSignal,
     project_id: str,
@@ -127,8 +151,24 @@ def capture(
     verdict = accepts(entry, confirmed=confirmed, cfg=gate_cfg)
     if not verdict.ok:
         return CaptureResult(entry=entry, verdict=verdict, stored=False)
+    # seed memoir edges BEFORE the write (read-only similarity pass, outside the
+    # lock — a slight read/write race only risks an edge to a just-archived id,
+    # which recall treats as absent: harmless, never a corruption)
+    entry = _seed_related_edges(entry)
+
+    def _write(entries: list[MemoryEntry]) -> list[MemoryEntry]:
+        from portaw.memory.store import link
+
+        entries = upsert(entries, entry, last_seen=today)
+        # reciprocal `related`: the edge is associative, so the OLD entry should also
+        # point back at the new one — otherwise an old lesson firing never pulls the
+        # newer associate in (recall fan-out reads the surfaced entry's own edges).
+        for tid in entry.targets(RELATED):
+            entries, _ = link(entries, tid, RELATED, entry.id)
+        return entries
+
     # under the store lock: concurrent Stop hooks must not drop each other's lesson
-    update_lessons(lambda entries: upsert(entries, entry, last_seen=today))
+    update_lessons(_write)
     return CaptureResult(entry=entry, verdict=verdict, stored=True)
 
 

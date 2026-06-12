@@ -3,12 +3,35 @@
 import json
 
 from portaw.memory import store
-from portaw.memory.schema import Anchors, MemoryEntry
+from portaw.memory.schema import RELATED, SUPERSEDED_BY, Anchors, MemoryEntry
 
 
 def _lesson(body, **kw):
     kw.setdefault("scope", "global")
     return MemoryEntry.new("lesson", body, **kw)
+
+
+def test_link_adds_edge_when_both_endpoints_exist():
+    a = _lesson("old fix")
+    b = _lesson("new fix")
+    out, linked = store.link([a, b], a.id, SUPERSEDED_BY, b.id)
+    assert linked
+    assert dict((e.id, e) for e in out)[a.id].targets(SUPERSEDED_BY) == (b.id,)
+
+
+def test_link_noops_when_endpoint_missing():
+    a = _lesson("only one")
+    out, linked = store.link([a], a.id, SUPERSEDED_BY, "ghost")
+    assert not linked and out == [a]  # edge to a phantom id refused
+
+
+def test_upsert_unions_relations_on_bump():
+    base = _lesson("same body").with_relation(RELATED, "x")
+    incoming = _lesson("same body").with_relation(RELATED, "y")  # same id (same body)
+    out = store.upsert([base], incoming, last_seen="2026-06-11")
+    assert len(out) == 1
+    assert set(out[0].targets(RELATED)) == {"x", "y"}  # neither edge lost on bump
+    assert out[0].recurrence == 2
 
 
 def test_load_missing_store_returns_empty(tmp_path):

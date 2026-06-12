@@ -5,12 +5,13 @@ from datetime import date
 from portaw.memory import store
 from portaw.memory.consolidate import (
     ConsolidationConfig,
+    apply_supersedes,
     consolidate,
     maybe_consolidate,
     merge_duplicates,
     promote,
 )
-from portaw.memory.schema import MemoryEntry
+from portaw.memory.schema import SUPERSEDED_BY, MemoryEntry
 
 TODAY = date(2026, 6, 10)
 FRESH = "2026-06-10"
@@ -70,6 +71,34 @@ def test_consolidate_kept_sorted_by_activation_desc():
     assert res.kept[0].body == "hi"
 
 
+# --- supersede edges (R13: consolidation seeds the suppressive edge) ---
+
+def test_apply_supersedes_links_old_to_new():
+    old = _lesson("old fix", last_seen=OLD)
+    new = _lesson("new fix")
+    out, count = apply_supersedes([old, new], [(old.id, new.id)])
+    by_id = {e.id: e for e in out}
+    assert count == 1
+    assert by_id[old.id].targets(SUPERSEDED_BY) == (new.id,)
+    assert by_id[new.id].relations == ()  # only the old side carries the edge
+
+
+def test_apply_supersedes_ignores_phantom_endpoint():
+    old = _lesson("old fix", last_seen=OLD)
+    out, count = apply_supersedes([old], [(old.id, "ghost")])
+    assert count == 0 and out[0].relations == ()
+
+
+def test_consolidate_applies_supersede_pairs():
+    # old fresh enough to survive the archive sweep, just older than new
+    old = _lesson("old fix", last_seen="2026-06-08", recurrence=5)
+    new = _lesson("new fix", recurrence=5)
+    res = consolidate([old, new], today=TODAY, supersedes=[(old.id, new.id)])
+    by_id = {e.id: e for e in res.kept}
+    assert res.superseded_count == 1
+    assert by_id[old.id].targets(SUPERSEDED_BY) == (new.id,)
+
+
 # --- maybe_consolidate (the SessionStart opportunistic trigger) ---
 
 def test_maybe_consolidate_runs_once_then_respects_marker(tmp_path, monkeypatch):
@@ -93,6 +122,52 @@ def test_maybe_consolidate_archives_stale_to_archive_store(tmp_path, monkeypatch
     assert [e.body for e in store.load_lessons()] == ["fresh"]
     archived = store._read_jsonl(store.archive_path())
     assert [e.body for e in archived] == ["stale never-proven"]
+
+
+def test_maybe_consolidate_session_mode_ignores_marker(tmp_path, monkeypatch):
+    from portaw.memory.consolidate import set_dream_interval
+
+    monkeypatch.setattr(store, "global_dir", lambda: tmp_path / "mem")
+    store.save_lessons([_lesson("keep me", recurrence=5)])
+    set_dream_interval(0)  # user chose: dream at every session boundary
+
+    assert maybe_consolidate(today=TODAY) is not None
+    assert maybe_consolidate(today=TODAY) is not None  # marker fresh, runs anyway
+
+
+def test_dream_interval_roundtrip_and_default(tmp_path, monkeypatch):
+    from portaw.memory.consolidate import (
+        AUTO_INTERVAL_DAYS,
+        dream_interval,
+        set_dream_interval,
+    )
+
+    monkeypatch.setattr(store, "global_dir", lambda: tmp_path / "mem")
+    assert dream_interval() == AUTO_INTERVAL_DAYS  # no config → weekly default
+    set_dream_interval(3)
+    assert dream_interval() == 3
+    set_dream_interval(-5)  # garbage in → clamped, never a negative cadence
+    assert dream_interval() == 0
+
+
+def test_dream_interval_tolerates_garbled_config(tmp_path, monkeypatch):
+    from portaw.memory.consolidate import AUTO_INTERVAL_DAYS, dream_interval
+
+    monkeypatch.setattr(store, "global_dir", lambda: tmp_path / "mem")
+    (tmp_path / "mem").mkdir(parents=True)
+    (tmp_path / "mem" / "dream.json").write_text("{not json", encoding="utf-8")
+    assert dream_interval() == AUTO_INTERVAL_DAYS  # garbled → safe default
+
+
+def test_maybe_consolidate_uses_configured_interval(tmp_path, monkeypatch):
+    from portaw.memory.consolidate import set_dream_interval
+
+    monkeypatch.setattr(store, "global_dir", lambda: tmp_path / "mem")
+    store.save_lessons([_lesson("keep me", recurrence=5)])
+    set_dream_interval(9999)  # effectively "almost never"
+
+    assert maybe_consolidate(today=TODAY) is not None   # first run always fires
+    assert maybe_consolidate(today=TODAY) is None       # then the long cadence holds
 
 
 def test_maybe_consolidate_never_raises(monkeypatch):

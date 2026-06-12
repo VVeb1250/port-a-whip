@@ -99,14 +99,68 @@ def session_select(
     return out
 
 
-def format_session(selected: list[MemoryEntry]) -> str:
-    """SessionStart pin block. Empty selection → empty string (silent)."""
-    if not selected:
+def project_digest(
+    entries: list[MemoryEntry],
+    *,
+    ctx: RetrievalContext | None = None,
+    today: date | None = None,
+    min_confidence: float = 0.7,
+    max_tokens: int = 150,
+    max_items: int = 4,
+) -> list[MemoryEntry]:
+    """The wake-pack: a tiny, high-confidence project-memory digest injected ONCE
+    at session start — ground truth the agent would otherwise re-derive (cost) or
+    hallucinate (worse), especially a fresh/short context or a weaker local model.
+
+    This is the principled carve-out from session_select's pinned-only rule: that
+    rule guards against unpinned LESSONS (negative knowledge with no prompt to be
+    relevant to). Project memory is different — it is positive ground truth about
+    THIS repo, relevant to the whole session by construction. Still gated hard:
+    project type only, high-confidence only, ranked by activation × confidence,
+    and capped to a small separate budget so it can never become a context-rot dump.
+    """
+    from portaw.memory.retrieval import activation, is_eligible
+
+    ctx = ctx or RetrievalContext()
+    today = today or date.today()
+    rc = RetrievalConfig()
+    cands = [
+        e for e in entries
+        if e.type == "project" and e.confidence >= min_confidence and is_eligible(e, ctx)
+    ]
+    cands.sort(key=lambda e: activation(e, today, rc) * e.confidence, reverse=True)
+
+    out: list[MemoryEntry] = []
+    budget = max_tokens
+    for e in cands:
+        if len(out) >= max_items:
+            break
+        cost = approx_tokens(e.body)
+        if cost > budget:
+            continue
+        out.append(e)
+        budget -= cost
+    return out
+
+
+def format_session(
+    selected: list[MemoryEntry], digest: list[MemoryEntry] | None = None
+) -> str:
+    """SessionStart block: pinned lessons (★) + optional project wake-pack digest.
+    Empty everything → empty string (silent)."""
+    digest = digest or []
+    if not selected and not digest:
         return ""
-    lines = ["\U0001f4a1 paw memory (session pins):"]
-    for e in selected:
-        rec = f" (×{e.recurrence})" if e.recurrence > 1 else ""
-        lines.append(f"• ★ {e.body}{rec}")
+    lines: list[str] = []
+    if selected:
+        lines.append("\U0001f4a1 paw memory (session pins):")
+        for e in selected:
+            rec = f" (×{e.recurrence})" if e.recurrence > 1 else ""
+            lines.append(f"• ★ {e.body}{rec}")
+    if digest:
+        lines.append("\U0001f4cc paw project memory:")
+        for e in digest:
+            lines.append(f"• {e.body}")
     return "\n".join(lines)
 
 

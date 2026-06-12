@@ -7,6 +7,7 @@ P3: PostToolUse Edit — anchor recall on the touched file, session-deduped.
 """
 
 import json
+from datetime import date
 
 import portaw.memory.sessionlog as sessionlog
 import portaw.memory.store as store
@@ -25,6 +26,13 @@ def _lesson(body, **kw):
     kw.setdefault("confidence", 0.9)
     kw.setdefault("last_seen", "2026-06-10")
     return MemoryEntry.new("lesson", body, **kw)
+
+
+def _project(body, **kw):
+    kw.setdefault("scope", "project")
+    kw.setdefault("confidence", 0.9)
+    kw.setdefault("last_seen", "2026-06-10")
+    return MemoryEntry.new("project", body, **kw)
 
 
 def _wire(monkeypatch, tmp_path, lessons, project=()):
@@ -85,6 +93,42 @@ def test_session_hook_compact_resets_and_refires(tmp_path, monkeypatch):
 def test_session_hook_silent_with_no_pins(tmp_path, monkeypatch):
     _wire(monkeypatch, tmp_path, [_lesson("not pinned")])
     assert run_session_hook(json.dumps({"session_id": "sC"})) is None
+
+
+# --- P1b: project-memory wake-pack digest ---
+
+def test_project_digest_high_confidence_only_ranked():
+    from portaw.memory.inject import project_digest
+
+    strong = _project("auth uses JWT not sessions", confidence=0.9)
+    weak = _project("maybe-true rumor", confidence=0.4)  # below min_confidence
+    out = project_digest([strong, weak], today=date(2026, 6, 10))
+    assert [e.body for e in out] == ["auth uses JWT not sessions"]
+
+
+def test_project_digest_excludes_lessons():
+    from portaw.memory.inject import project_digest
+
+    # a lesson must never ride the project digest (it's the pinned tier's job)
+    out = project_digest([_lesson("a lesson", confidence=0.95)], today=date(2026, 6, 10))
+    assert out == []
+
+
+def test_session_hook_injects_project_wake_pack(tmp_path, monkeypatch):
+    _wire(monkeypatch, tmp_path, [], project=[_project("auth uses JWT not sessions")])
+    out = run_session_hook(json.dumps({"session_id": "sW", "cwd": str(tmp_path)}))
+    assert out is not None and "auth uses JWT not sessions" in out
+    assert "paw project memory" in out
+    # dedups like the pins do — second call in the same session is silent
+    assert run_session_hook(json.dumps({"session_id": "sW", "cwd": str(tmp_path)})) is None
+
+
+def test_session_hook_combines_pins_and_digest(tmp_path, monkeypatch):
+    _wire(monkeypatch, tmp_path,
+          [_lesson("use py not python", pinned=True)],
+          project=[_project("auth uses JWT not sessions")])
+    out = run_session_hook(json.dumps({"session_id": "sM", "cwd": str(tmp_path)}))
+    assert "use py not python" in out and "auth uses JWT not sessions" in out
 
 
 # --- P2: Bash failure recall ---

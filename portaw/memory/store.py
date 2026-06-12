@@ -201,10 +201,14 @@ def upsert(
     found = False
     for e in entries:
         if e.id == entry.id:
+            rels = tuple(
+                {(r.rel, r.target): r for r in (*e.relations, *entry.relations)}.values()
+            )
             out.append(replace(
                 e.bumped(last_seen=last_seen),
                 pinned=e.pinned or entry.pinned,
                 confidence=max(e.confidence, entry.confidence),
+                relations=rels,
             ))
             found = True
         else:
@@ -212,6 +216,32 @@ def upsert(
     if not found:
         out.append(entry)
     return out
+
+
+# --- typed edges (the memoir half: link two existing entries) ---
+
+def link(
+    entries: list[MemoryEntry], src_id: str, rel: str, dst_id: str
+) -> tuple[list[MemoryEntry], bool]:
+    """Return (new list, linked?) with edge (rel → dst_id) added to `src_id`.
+
+    Pure — caller persists. Both endpoints must already exist (an edge to a
+    phantom id would just be dead weight). `with_relation` ignores self-edges,
+    unknown rel types, and duplicates, so re-linking is idempotent.
+    """
+    ids = {e.id for e in entries}
+    if src_id not in ids or dst_id not in ids:
+        return entries, False
+    out: list[MemoryEntry] = []
+    linked = False
+    for e in entries:
+        if e.id == src_id:
+            new = e.with_relation(rel, dst_id)
+            linked = new is not e
+            out.append(new)
+        else:
+            out.append(e)
+    return out, linked
 
 
 # --- archive (consolidation moves stale lessons here, not deletion) ---

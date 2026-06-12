@@ -7,7 +7,7 @@ pip install port-a-whip        # not yet on PyPI (alpha-HOLD); build from source
 portaw install efficiency-starter
 ```
 
-> **Status: alpha (v0.3, Phase 1-3 built, 164 tests).** L1-L3 all live on Claude Code + Codex; Gemini wired but not live-verified. Source of truth → [port-a-whip-spec.md](port-a-whip-spec.md).
+> **Status: alpha (v0.3, Phase 1-3 built, 346 tests).** L1-L3 all live on Claude Code + Codex; Gemini wired but not live-verified. L3 now carries typed memoir edges, a wake-pack project digest, and git-backed cross-host sync. Source of truth → [port-a-whip-spec.md](port-a-whip-spec.md).
 
 ## What it is
 
@@ -51,13 +51,16 @@ portaw memory list [--type X]
 portaw memory recall <prompt> [--symbol X] [--path X] [--embed]
 portaw memory pin <id> [--unpin]
 portaw memory rm <id>
+portaw memory link <src> <rel> <dst>   # typed memoir edge (superseded_by|contradicts|caused_by|related), cross-store
 portaw memory export [--out file.md]
 portaw memory capture --trigger X --fix Y [--symbol X]
-portaw memory consolidate [--dry-run]
+portaw memory consolidate [--dry-run] [--every session|N]  # dream: merge/promote/decay + auto-supersede (OFF by default)
+portaw memory sync [--init <private-remote>]  # git-backed cross-host lesson sync (content-hash fold)
 portaw memory init [--confirm]         # seed project-memory from docs/adr/*
 portaw memory harvest [--confirm]      # harvest mistakes-index.md → lessons
 portaw memory enable [--host X]        # wire capture hook (Stop event)
-portaw memory inject-enable session|tool|all  # live-inject surfaces
+portaw memory inject-enable session|tool|all   # live-inject surfaces (SessionStart pins + wake-pack, PostToolUse recall)
+portaw memory inject-disable session|tool|all
 ```
 
 ## Curated sets (6)
@@ -85,14 +88,16 @@ portaw memory inject-enable session|tool|all  # live-inject surfaces
 ```
 port-a-whip/
 ├── portaw/                    # package; CLI = `portaw`
-│   ├── main.py                # Click CLI (6 groups, 29 commands)
+│   ├── main.py                # Click CLI (6 groups; memory group = 21 commands)
 │   ├── config.py              # detect host; locate + parse config (json/toml)
 │   ├── bench.py               # B1 token-delta bench (ccusage wrapper)
 │   ├── sets/                  # L1: set load + install orchestration
 │   │   ├── loader.py          # parse sets.json
 │   │   ├── patcher.py         # patch host config (json+toml dict-merge, backup)
 │   │   ├── install.py         # orchestrator (N1 ceiling, host resolve, shim)
-│   │   └── healthcheck.py     # §10 health-gate (binary probe, host-cond anchors)
+│   │   ├── healthcheck.py     # §10 health-gate (binary probe, host-cond anchors)
+│   │   ├── state.py           # ~/.paw/state.json ledger — what paw wrote per host
+│   │   └── usage.py           # real tool_use evidence from transcripts (idle-def flag)
 │   ├── kernel/                # L2: portable ranking (also used by L3)
 │   │   ├── ranking.py         # TF-IDF tier-1 + intent-boost + conflict-prune
 │   │   ├── registry.py        # capability registry (built from sets.json)
@@ -101,17 +106,22 @@ port-a-whip/
 │   │   ├── router.py          # UserPromptSubmit/BeforeAgent hook + paw_block inject
 │   │   └── memory_hooks.py    # SessionStart pinned / PostToolUse recall
 │   └── memory/                # L3: lesson + project memory
-│       ├── schema.py          # content-hash id, MemoryEntry
-│       ├── store.py           # jsonl (global ~/.paw + project .paw), atomic upsert
-│       ├── retrieval.py       # hybrid: TF-IDF + anchor overlap + ACT-R activation
-│       ├── inject.py          # silence-biased, per-type threshold, budget cap
-│       ├── capture.py         # FailureSignal → gate → upsert
+│       ├── schema.py          # content-hash id, MemoryEntry, typed Relation edges
+│       ├── store.py           # jsonl (global ~/.paw + project .paw), atomic upsert, link()
+│       ├── retrieval.py       # hybrid: TF-IDF + anchor + ACT-R + edge reshape (suppress/contradict/fan-out)
+│       ├── similarity.py      # embedding near-neighbours → seed memoir edges (fail-safe)
+│       ├── inject.py          # silence-biased, per-type threshold, budget cap + wake-pack digest
+│       ├── capture.py         # FailureSignal → gate → upsert (+ additive related-edge seeding)
 │       ├── detect.py          # NL transcript→FailureSignal detector
 │       ├── gate.py            # integrity gate (scope-scaled bar)
+│       ├── confidence.py      # confidence decay tied to recurrence + misses
+│       ├── outcomes.py        # L3 effectiveness loop (misses → distrust)
+│       ├── observations.py    # raw signal staging
 │       ├── anchors.py         # zero-setup structural (path/symbol)
 │       ├── context.py         # host-context derivation
-│       ├── consolidate.py     # async dream: merge/promote/decay-archive
+│       ├── consolidate.py     # async dream (OFF by default): merge/promote/decay + auto-supersede
 │       ├── harvest.py         # mistakes-index.md → lessons harvester
+│       ├── sync.py            # git-backed cross-host lesson sync (content-hash fold)
 │       ├── seed.py            # ADR→project-memory
 │       ├── hookwire.py        # wire capture/inject hooks into host config
 │       └── sessionlog.py      # session-transcript parser
@@ -119,9 +129,9 @@ port-a-whip/
 │   └── sets.json              # 6 curated sets (NOT per-tool registry)
 ├── integration/
 │   └── skill-router.py        # author's live hook bridge (kernel-unify)
-├── tests/                     # 164 tests
+├── tests/                     # 346 tests
 ├── docs/
-│   └── L3-DESIGN.md           # L3 design (R1-R12)
+│   └── L3-DESIGN.md           # L3 design (R1-R13 incl. memoir edges)
 ├── pyproject.toml
 ├── CLAUDE.md                  # build-facing summary
 └── port-a-whip-spec.md        # source of truth (v0.3)
@@ -144,11 +154,15 @@ Set schema, 6 curated sets, patcher (json+toml dict-merge), shim, health-check, 
 Codex adapter (TOML, live-verified), Gemini adapter (JSON, wired), token metric protocol v2, host-conditional anchors (codegraph/semble XOR), 2 more sets (design-quality, web-research), browser-automation (set #6).
 
 ### Phase 3 — Lesson-memory ✅
-L3 core built (164 tests): schema, store, hybrid retrieval, silence-biased inject, capture + gate, consolidate, mistakes-index harvester, embedding tier-2, kernel-unify (live inject via skill-router bridge), dogfood (all 3 layers live).
+L3 core built (346 tests): schema, store, hybrid retrieval, silence-biased inject, capture + gate, consolidate, mistakes-index harvester, embedding tier-2, kernel-unify (live inject via skill-router bridge), dogfood (all 3 layers live).
+
+**Memoir edges + connection layer (R13):** typed `relations` between entries (superseded_by / contradicts / caused_by / related) reshape recall — suppress superseded, drop the weaker contradiction side, 1-hop fan-out from survivors (no-op on legacy data). Capture seeds only additive `related` edges (poison-safe); suppressive edges come only from consolidation (`supersede_pairs`, 6 guards) or manual `memory link`. **Wake-pack**: SessionStart injects a high-confidence project-memory digest (≤150 tok) for anti-hallucination grounding on short-context / weak-local models. Dream cadence is user-set and **OFF by default**.
+
+**Evidence loops** (all 3 layers learn): L1 state ledger + `doctor --usage` (real `tool_use`, not mentions); L2 outcome loop (suggested ≥5 + used 0 → demoted); L3 effectiveness (`misses ≥3` → distrust even at high confidence). L3 sync = git-backed, content-hash fold, imports quarantined until local recurrence.
 
 ### Phase 3 remaining
 - [ ] Capture hook port to Codex/Gemini (Stop event name + transcript format need live confirmation)
-- [ ] Cross-host lesson sync
+- [ ] Real-ONNX + live-transcript dogfood of memoir edges (all R13 tests use injected encoder → DOGFOOD-PENDING #13)
 
 ### Phase 4 — GUI (candidate)
 - [ ] `portaw ui` — stateless TUI, explicit subcommand, no daemon

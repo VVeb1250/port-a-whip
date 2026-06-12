@@ -10,7 +10,13 @@ from portaw.memory.retrieval import (
     is_eligible,
     recall,
 )
-from portaw.memory.schema import Anchors, MemoryEntry
+from portaw.memory.schema import (
+    CAUSED_BY,
+    CONTRADICTS,
+    SUPERSEDED_BY,
+    Anchors,
+    MemoryEntry,
+)
 
 TODAY = date(2026, 6, 10)
 
@@ -117,3 +123,45 @@ def test_recall_low_confidence_sinks_below_high():
     ]
     hits = recall("await problem", entries, today=TODAY)
     assert [h.entry.confidence for h in hits] == [0.95, 0.1]
+
+
+# --- typed edges (memoir half) ---
+
+def test_recall_suppresses_superseded_when_replacement_present():
+    new = _lesson("use py launcher on windows", trigger_terms=("python", "windows", "py"))
+    old = _lesson(
+        "use python3 on windows", trigger_terms=("python", "windows")
+    ).with_relation(SUPERSEDED_BY, new.id)
+    ids = [h.entry.id for h in recall("python on windows", [old, new], today=TODAY)]
+    assert new.id in ids and old.id not in ids  # stale lesson retired by its replacement
+
+
+def test_recall_keeps_superseded_when_replacement_ineligible():
+    # replacement is scoped to a stack absent from context → don't silently hide the old one
+    new = _lesson("use py launcher", applicability="stack:django", trigger_terms=("python", "py"))
+    old = _lesson("use python3", trigger_terms=("python",)).with_relation(SUPERSEDED_BY, new.id)
+    hits = recall(
+        "python problem", [old, new],
+        ctx=RetrievalContext(stacks=frozenset({"react"})), today=TODAY,
+    )
+    assert old.id in [h.entry.id for h in hits]
+
+
+def test_recall_drops_weaker_side_of_contradiction():
+    hi = _lesson("await fix", trigger_terms=("await",), confidence=0.95)
+    lo = _lesson(
+        "await opposite", trigger_terms=("await",), confidence=0.1
+    ).with_relation(CONTRADICTS, hi.id)
+    ids = [h.entry.id for h in recall("await problem", [hi, lo], today=TODAY)]
+    assert hi.id in ids and lo.id not in ids
+
+
+def test_recall_fans_out_to_related_root_cause():
+    # the cause shares no word with the prompt → it can only ride in via the edge
+    cause = _lesson("rebuild native module after node upgrade", trigger_terms=("node", "rebuild"))
+    symptom = _lesson(
+        "segfault on import", trigger_terms=("segfault", "import")
+    ).with_relation(CAUSED_BY, cause.id)
+    ids = [h.entry.id for h in recall("segfault on import", [symptom, cause], today=TODAY)]
+    assert symptom.id in ids and cause.id in ids       # root cause pulled in 1-hop
+    assert ids.index(symptom.id) < ids.index(cause.id)  # and it rides below its parent
