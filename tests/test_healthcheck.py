@@ -32,18 +32,19 @@ def test_context_quality_mcp_without_health_binary_is_config_only(monkeypatch):
 
 
 def test_efficiency_starter_codegraph_probes_declared_binary(monkeypatch):
-    monkeypatch.setattr(hc.shutil, "which", _fake_which({"codegraph", "rtk"}))
+    monkeypatch.setattr(hc.shutil, "which", _fake_which({"codegraph", "rtk", "ast-grep"}))
     h = hc.check_set("efficiency-starter")  # default host = claude-code
     by_tool = {t.tool: t for t in h.tools}
     assert by_tool["codegraph"].status == "ok"  # health_binary: codegraph
     assert by_tool["rtk"].status == "ok"
+    assert by_tool["ast-grep"].status == "ok"
     assert by_tool["semble"].status == "alt"  # anchored to codex/gemini, not CC
     assert h.ok  # semble absence on CC does NOT fail the gate
 
 
 def test_efficiency_starter_on_load_all_host_requires_semble_not_codegraph(monkeypatch):
     # codex host: semble is the anchor (must be present), codegraph is the alt
-    monkeypatch.setattr(hc.shutil, "which", _fake_which({"semble", "rtk"}))
+    monkeypatch.setattr(hc.shutil, "which", _fake_which({"semble", "rtk", "ast-grep"}))
     h = hc.check_set("efficiency-starter", host="codex")
     by_tool = {t.tool: t for t in h.tools}
     assert by_tool["semble"].status == "ok"

@@ -20,7 +20,14 @@
         "test output",
         "compress",
         "token",
-        "tool calls"
+        "tool calls",
+        "refactor",
+        "rewrite",
+        "codemod",
+        "ast",
+        "structural search",
+        "find pattern",
+        "rename across files"
       ],
       "token_profile": {
         "method": "measured = ccusage A/B (portaw bench --ab/--how) on the set's canonical workload, or command-level rtk-gain instrumentation. calculated = tiktoken (cl100k_base proxy) on the verbatim live MCP tool-def JSON the host loads (host tokenizers vary ~10-15%). vendor-claimed = from vendor docs, unverified. estimated = reasoned, not measured. neutral = 0 MCP tool-defs by construction (CLI/hook), idle schema cost provably zero. delta_pct = signed % tokens saved (+ = saved); idle_def_tokens = always-on tool-def cost on load-all hosts (0 on Claude Code, which lazy-loads).",
@@ -223,12 +230,72 @@
             "aider"
           ],
           "_install_note": "rtk is non-MCP (never in any MCP registry by definition) — exactly the gap paw fills. It self-installs its hook; paw orchestrates the step + records it for clean `portaw remove`. NO shell=True execution of community-supplied strings (RCE) — these install steps are curated/reviewed, pinned, and run as a fixed vendor script."
+        },
+        {
+          "tool": "ast-grep",
+          "display_name": "ast-grep (structural code search/rewrite)",
+          "ref": "ast-grep/ast-grep",
+          "license": "MIT",
+          "version": "0.43.0",
+          "kind": "cli",
+          "health_binary": "ast-grep",
+          "purpose": "AST-pattern search/lint/rewrite (Rust, tree-sitter, polyglot). Fills the STRUCTURAL rung between lexical grep (host-native ripgrep) and graph (codegraph/semble): matches code SHAPE (`foo($$$ARGS)`) not text — no comment/string/whitespace false-positive lines entering context; and a multi-file codemod (`--rewrite`) = ONE bounded command + unified diff instead of N Edit round-trips. 0 MCP tool-defs.",
+          "_axis_note": "axis = ↓token, two structural mechanisms (provenance: CALCULATED — paw deterministic A/B 2026-06-12, tiktoken cl100k on real tool output, bench/_astgrep_ab.py, on the paw repo itself = a CLEAN/low-noise codebase so these are conservative): (1) precision — `route(` text-grep 242 tok (9 hit-lines incl. the `def`, substrings, any comment/string mention) vs ast-grep `route($$$A)` call-shape 74 tok = +69.4% (structural match returns only true call sites, tighter form); (2) bulk codemod (rename across files) — ast-grep `--rewrite` preview diff 291 tok vs a grep->read->edit loop 1,217 tok (tight +/-3 windows, LOWER bound) to 10,961 tok (full affected files, UPPER bound) = +76.1% to +97.3%. Completes the lexical/structural/graph triad inside ONE set; each rung answers a different question class (text? shape? relationships?) — no overlap with codegraph (no call-graph here) or rtk (different surface, see compat). Noisier real-world codebases (heavy comments/strings/substring collisions) widen mechanism-1 well past 69%.",
+          "install": [
+            {
+              "label": "install ast-grep (npm)",
+              "cmd": "npm install --global @ast-grep/cli",
+              "_alt_pip": "py -m pip install ast-grep-cli (this box) / pip install ast-grep-cli",
+              "_alt_scoop": "scoop install main/ast-grep",
+              "_alt_brew": "brew install ast-grep",
+              "_alt_cargo": "cargo install ast-grep --locked",
+              "runs_vendor_code": true
+            }
+          ],
+          "usage_hint": "ast-grep run -p 'console.log($$$A)' src/   |   rewrite: ast-grep run -p '$F.unwrap()' --rewrite '$F.expect(\"msg\")' -U   |   rules: ast-grep scan (sgconfig.yml)",
+          "optional_skill": {
+            "ref": "ast-grep/agent-skill",
+            "install": "npx skills add ast-grep/agent-skill",
+            "_note": "Skill in the ast-grep GitHub org (726★) teaching the agent to WRITE ast-grep rules (plugin-marketplace wrapper, not a separate tool). Optional — the CLI alone is the set entry; skill = 0 idle (progressive disclosure)."
+          },
+          "host_support": [
+            "claude-code",
+            "codex",
+            "gemini",
+            "cursor",
+            "aider"
+          ],
+          "_verified": "2026-06-12 web: ast-grep/ast-grep 14.5k★ MIT v0.43.0 (2026-05-25); install commands quoted from README (npm/pip/scoop/brew/cargo; no winget found — absence from README page, not proof). agent-skill repo lives in the ast-grep org. INSTALL-TESTED 2026-06-12 on this Windows box: `npm install --global @ast-grep/cli` -> ast-grep 0.43.0 on PATH, `portaw verify efficiency-starter` gate PASS (codegraph+rtk+ast-grep ok). Deterministic A/B RAN (bench/_astgrep_ab.py): precision +69.4%, codemod +76-97% (numbers in _axis_note). WINDOWS NOTE: npm ships a `.CMD`/`.ps1` shim that subprocess(shell=False) cannot launch directly — resolve the real `%APPDATA%\\npm\\node_modules\\@ast-grep\\cli\\ast-grep.exe`. CAUTION: `--rewrite ... -U/--update-all` APPLIES in place (mutated repo files during the first A/B run; reverted); use `--rewrite` WITHOUT -U for a preview diff. rtk collision: NONE — rtk's PreToolUse rewrites only its known command list; `ast-grep` passes through, and its output is already bounded by the match (nothing for rtk to compress)."
         }
       ],
-      "compat_notes": "CURATION VALUE — why these two are vetted together: DIFFERENT LAYERS, no collision. (1) codegraph = MCP context provider, adds tools, NO host hook. (2) rtk = PreToolUse hook, compresses Bash OUTPUT, adds NO MCP tools. They never touch the same surface: rtk owns PreToolUse, codegraph owns MCP. Complementary token reduction (rtk on shell output, codegraph on code-navigation). Install order: codegraph (config patch + index build) then rtk (hook). rtk supports claude-code/cursor/gemini/aider; codegraph supports claude-code/codex/gemini/cursor/opencode — INTERSECTION for full-set = claude-code, gemini, cursor (codex gets codegraph only; aider gets rtk only).",
+      "compat_notes": "CURATION VALUE — DIFFERENT LAYERS, no collision. (1) codegraph/semble = MCP context provider, adds tools, NO host hook. (2) rtk = PreToolUse hook, compresses Bash OUTPUT, adds NO MCP tools. (3) ast-grep = plain CLI, no hook, no MCP def; rtk passes it through (not in rtk's rewrite list) and its output is bounded by the match. Together the set covers the full search triad — lexical (host-native ripgrep) / STRUCTURAL (ast-grep) / GRAPH (codegraph callers/impact) — plus output compression (rtk); each rung answers a different question class, no redundancy. Install order: codegraph (config patch + index build) then rtk (hook) then ast-grep (any time). rtk supports claude-code/cursor/gemini/aider; codegraph supports claude-code/codex/gemini/cursor/opencode; ast-grep = any host with a shell — INTERSECTION for full-set = claude-code, gemini, cursor (codex gets codegraph+ast-grep; aider gets rtk+ast-grep).",
+      "optional_sources": [
+        {
+          "tool": "gortex",
+          "kind": "cli + daemon",
+          "kind_axis": "graph-search rival to codegraph",
+          "license": "Apache-2.0",
+          "note": "Graph-search engine (resolved symbol edges, 'who calls this') claiming 3-50x token cuts vs grep workflows (vendor-claimed, zzet.org write-up 2026). RIVAL to the codegraph anchor, NOT additive — never load both. Held out of the set: (1) needs a resident DAEMON (friction vs paw's no-daemon lean), (2) no paw bench vs codegraph's measured proxy + ROP capability run. Re-evaluate only via a head-to-head A/B (DOGFOOD-PENDING class).",
+          "axis": "down-token (graph), vendor-claimed"
+        },
+        {
+          "tool": "headroom",
+          "kind": "api-proxy",
+          "kind_axis": "session/history compression, STACKS with rtk",
+          "note": "Already vetted 2026-06-09 (see verified.headroom_challenge): complementary layer (+12% additive over rtk's 88% in a real dual-deploy), kept OPTIONAL because PyPI ships no Windows wheel (Rust/maturin build friction). Promoted here from the verified-notes so the rung is visible to the router.",
+          "axis": "down-token (additive rung), measured-by-third-party"
+        }
+      ],
+      "rejected": [
+        {
+          "tool": "ast-grep-mcp",
+          "reason": "Experimental MCP wrapping the LOCAL ast-grep CLI = always-on idle defs for zero capability delta — the CLI is already one bounded shell call. Same lean-vs-heavy verdict as duckdb-MCP (data-query) and playwright-MCP (browser-automation).",
+          "axis": "idle-def blow for no capability delta"
+        }
+      ],
       "verified": {
         "schema_validated": "2026-06-05",
-        "refs_confirmed": "2026-06-05 — codegraph npm @colbymchenry/codegraph confirmed; rtk github.com/rtk-ai/rtk MIT confirmed",
+        "refs_confirmed": "2026-06-05 — codegraph npm @colbymchenry/codegraph confirmed; rtk github.com/rtk-ai/rtk MIT confirmed. 2026-06-12 — ast-grep/ast-grep 14.5k★ MIT v0.43.0 confirmed via web + INSTALL-TESTED on this box (npm global, ast-grep 0.43.0, verify gate PASS). Structural-rung delta = CALCULATED via paw deterministic A/B (bench/_astgrep_ab.py): precision +69.4%, codemod +76-97% (conservative — measured on the clean paw repo).",
         "config_block_confirmed": "2026-06-05 — codegraph mcp_config captured from `codegraph install --print-config <id>` (claude/codex/gemini/cursor, drift corrected npx→bare binary); rtk hook entry captured from live settings.json (PreToolUse/Bash/`rtk hook claude`). Both stored in mcp_config_per_host + hook_entry.",
         "token_profile_benchmarked": "partial — rtk anchor LOCKED 2026-06-05 (rtk-gain: 26.3% mixed / 35.6K saved / 320 cmds, command-level paired A/B, zero cache noise). codegraph half pending Phase-2.",
         "rtk_anchor_decision": "LOCKED. rtk net-positive on real mixed workload (26.3%); strongest on bulk/structured output (diff/ls/build). Beats peer-anchor bar — rivals (context-mode/lean-ctx/snip/ecotokens) do NOT self-report a reproducible command-level number, rtk does. No swap.",
@@ -990,8 +1057,8 @@
             "provenance": "neutral",
             "delta_pct": null,
             "idle_def_tokens": 0,
-            "sample": "0 MCP servers (duckdb + jq = CLI on demand).",
-            "note": "Idle provably zero. Runtime delta_pct deliberately null until a paw A/B runs — but the mechanism is structural: query output is bounded by the query (LIMIT/aggregate), whole-file Read is bounded by the file. A 2MB CSV ≈ 500K+ tok to Read vs tens of tok for the aggregate answer."
+            "sample": "0 MCP servers (duckdb + jq = CLI on demand). Runtime A/B RAN 2026-06-12 (bench/_dataquery_ab.py, deterministic tiktoken cl100k).",
+            "note": "Idle provably zero. Runtime delta CALCULATED 2026-06-12: 2.02MB / 50k-row CSV = 1,099,015 tok to Read whole-file vs 477 tok for duckdb schema-discovery (72) + 3 query answers (count-by-region 98 / filter-top5 195 / revenue-by-region 112) = +99.96%. Mechanism is structural: query output bounded by the query (LIMIT/aggregate), whole-file Read bounded by the file. The 2MB case is dramatic because a 50k-row Read is enormous (also exceeds host Read limits → many calls); the bounded-vs-unbounded truth holds at any size."
           },
           "codex": {
             "provenance": "neutral",
@@ -1091,10 +1158,10 @@
       "compat_notes": "CURATION VALUE — the targeted-query lever for LOCAL structured data, 0 MCP defs. Non-overlapping with neighbours: codegraph = code structure, data-query = data FILES; web-research = remote pages, data-query = local files; doc-extract = RENDER binary office docs to readable md, data-query = QUERY-shaped questions (xlsx overlap rule: 'what does the sheet say' → markitdown render; 'sum/filter/join the rows' → duckdb). rtk: no hook collision (rtk rewrites its known command list; duckdb/jq pass through, and their output is already bounded by the query — nothing to compress). N1: 0 MCP → stacks with everything. Both tools keyless, offline, single binary.",
       "verified": {
         "date": "2026-06-12",
-        "status": "DRAFT — refs + versions confirmed via web search 2026-06-12 (duckdb v1.5.2 stable / v1.4 LTS; jq 1.8.1, ~34.7k★). NOT install-tested (neither binary on the dev box yet — see DOGFOOD-PENDING). token_profile neutral by construction (0 MCP defs); runtime delta_pct needs a paw A/B (whole-file Read vs duckdb query on a fixed CSV workload — deterministic tiktoken, same method as web-research).",
+        "status": "verified — INSTALL-TESTED + runtime A/B done 2026-06-12 on this Windows box. `winget install DuckDB.cli` -> duckdb v1.5.3 (note: web said v1.5.2; v1.5.3 was current at install — newer, fine), `winget install jqlang.jq` -> jq-1.8.1. `portaw verify data-query` gate PASS (both health_binary which-probes ok). Runtime delta CALCULATED via bench/_dataquery_ab.py = +99.96% (whole-file Read 1.099M tok vs duckdb schema+3-queries 477 tok on a 2.02MB/50k-row CSV). WINDOWS NOTE: winget PATH change is not visible to an already-spawned shell — merge Machine+User PATH (or restart shell) before verify.",
         "config_block_confirmed": "n/a — no MCP config; install commands quoted from official docs (install.duckdb.org, jqlang download page)",
-        "token_profile_benchmarked": false,
-        "hosts": []
+        "token_profile_benchmarked": "CC runtime delta CALCULATED 2026-06-12 (+99.96%, deterministic tiktoken, bench/_dataquery_ab.py). jq lane not separately benched (same bounded-slice mechanism).",
+        "hosts": ["claude-code"]
       }
     },
     {
@@ -1202,10 +1269,10 @@
       "compat_notes": "CURATION VALUE — fills the binary-document blind spot at 0 MCP tool-defs. Non-overlapping with neighbours: web-research = remote web pages; doc-extract = LOCAL binary documents; data-query = query-shaped questions (xlsx rule: 'what does the sheet say' → markitdown render; 'sum/filter the rows' → duckdb); context-quality = library docs. N1: 0 MCP → stacks with everything. Anchor keyless/offline after pip install. SECURITY: converting UNTRUSTED documents executes parser code over hostile input — keep markitdown current (pin-at-install, bump on advisories); pairs with secure-agent.",
       "verified": {
         "date": "2026-06-12",
-        "status": "DRAFT — ref confirmed via web search 2026-06-12 (microsoft/markitdown official, v0.1.6 2026-05-26, MIT; official markitdown-mcp subpackage = 1 tool convert_to_markdown; aggregator star count ~150k UNVERIFIED). NOT install-tested (markitdown not on the dev box yet — see DOGFOOD-PENDING). token_profile neutral by construction.",
+        "status": "verified — INSTALL-TESTED + capability probe done 2026-06-12 on this Windows box. `py -m pip install \"markitdown[all]\"` -> `portaw verify doc-extract` gate PASS. Capability probe (bench/_docextract_probe.py): generated a docx (h1/h2 headings + 3-col table) and an xlsx (named sheet + 10 rows), converted both via markitdown -> markdown PRESERVED structure = `# Quarterly Report` + `## Summary`/`## Regional Breakdown`, table rendered as GFM `| Region | Revenue | Growth |`, xlsx sheet name + all columns + all 10 rows intact. VERDICT structure-preserving = True. ⚠️ VERSION FINDING: pip installed markitdown **0.0.2**, NOT the web-reported v0.1.6 — this box runs Python 3.14 (scoop) and the 0.1.x line appears to lack a 3.14-compatible wheel, so pip resolved the older 0.0.2 (which has no upper pin). 0.0.2 converts docx/xlsx correctly; for the 0.1.x feature set, install under Python <=3.13. delta_pct stays null (capability-class).",
         "config_block_confirmed": "n/a for CLI anchor; markitdown-mcp config shape from official package README (command markitdown-mcp), not host-captured",
         "token_profile_benchmarked": false,
-        "hosts": []
+        "hosts": ["claude-code"]
       }
     }
   ]

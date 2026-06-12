@@ -5,7 +5,7 @@
 > can't drive, or real usage over days. Each item = why + exact steps + where the
 > result lands. Tick when done.
 >
-> Last updated 2026-06-08. Most-leverage first.
+> Last updated 2026-06-12. Most-leverage first.
 >
 > **▶ COPY-PASTE SHEET: `bench/RUN-PROMPTS.md`** — one ready-to-paste block per
 > remaining run (groups A-F), with per-block SETUP + trials + report-back. Open it,
@@ -160,16 +160,15 @@ after an actual Gemini host turn.
 
 ---
 
-## 9. [ ] data-query + doc-extract (sets #7-8, added 2026-06-12) — install-test + runtime A/B
+## 9. [x] data-query + doc-extract (sets #7-8) — DONE 2026-06-12 (install-tested + A/B)
 
-**Why:** drafted with web-verified refs/versions (duckdb v1.5.2, jq 1.8.1, markitdown v0.1.6) but NO binary is on the dev box — `verify` will show MISSING until installed. Both sets are 0-MCP CLI (neutral idle, no config patch), so the only gates left are install health + the runtime delta story.
+**DONE 2026-06-12 on this Windows box (all self-doable, no fresh session needed):**
+- **Installs:** `winget install DuckDB.cli` -> duckdb **v1.5.3** (web said v1.5.2; newer); `winget install jqlang.jq` -> jq-1.8.1; `py -m pip install "markitdown[all]"` -> markitdown **0.0.2** (NOT v0.1.6 — py3.14 lacks a 0.1.x wheel, pip back-resolved; 0.0.2 converts fine). All three `portaw verify` gates PASS (data-query, doc-extract).
+- **data-query A/B** (bench/_dataquery_ab.py, deterministic tiktoken cl100k): 2.02MB/50k-row CSV = Read-whole-file **1,099,015 tok** vs duckdb schema(72)+3 queries(98/195/112) **477 tok = +99.96%**. provenance CALCULATED. Written to sets.json data-query CC note + verified.
+- **doc-extract probe** (bench/_docextract_probe.py): docx (headings+table) + xlsx (sheet+10 rows) -> markitdown md preserved `#`/`##` headings, GFM table, all rows/cols. VERDICT structure-preserving = True. delta null (capability-class). DRAFT->verified.
+- **WINDOWS gotcha recorded:** winget PATH change invisible to an already-spawned shell -> merge Machine+User PATH before `portaw verify`.
 
-**Steps:**
-1. `winget install DuckDB.cli` + `winget install jqlang.jq` + `py -m pip install "markitdown[all]"` → `portaw verify data-query` / `portaw verify doc-extract` (expect PASS via health_binary which-probe).
-2. data-query runtime A/B (deterministic, same method as web-research): fixed CSV (~2-5MB) + 3 question workload (count-by-group / filter / join) — lane A = Read whole file, lane B = `duckdb -c`. tiktoken both lanes → `delta_pct` with provenance `measured`.
-3. doc-extract: convert one real docx + xlsx, confirm structure survives (tables/headings) → flip DRAFT→verified. No delta_pct (capability-class, stays null).
-
-**Result →** sets.json both sets `verified.status` DRAFT → verified (+ data-query CC `delta_pct`).
+**Remaining (low value):** jq separately not benched (same bounded-slice mechanism); markitdown 0.1.x feature set needs Python <=3.13.
 
 ---
 
@@ -177,3 +176,12 @@ after an actual Gemini host turn.
 - ✅ codegraph index BUILT for port-a-whip (21 files/283 nodes) — `codegraph_explore` live for this repo.
 - ✅ semble installed (`uv tool install semble`) — ready for items 1 + load-all hosts.
 - ✅ idle-def CALCULATED (no run needed): context-quality 927, semble 509, codegraph 1615 (all tiktoken cl100k).
+
+## 12. [x] ast-grep — DONE 2026-06-12 (install-tested + structural-rung A/B)
+
+**DONE 2026-06-12 on this box:**
+- **Install:** `npm install --global @ast-grep/cli` -> ast-grep 0.43.0. `portaw verify efficiency-starter` gate PASS (codegraph+rtk+ast-grep). test fixtures updated (+ast-grep in fake PATH), 297 pass.
+- **A/B** (bench/_astgrep_ab.py, deterministic tiktoken cl100k, on the clean paw repo = conservative): (1) precision `route(` text-grep 242 tok vs ast-grep call-shape 74 tok = **+69.4%**; (2) codemod rename `--rewrite` preview diff 291 tok vs grep->read->edit loop 1,217 (tight windows) - 10,961 (full files) = **+76.1% to +97.3%**. provenance bumped estimated -> CALCULATED in sets.json _axis_note + _verified.
+- **WINDOWS gotchas recorded in sets.json:** (a) npm `.CMD`/`.ps1` shim not launchable by subprocess(shell=False) -> resolve real `...\\node_modules\\@ast-grep\\cli\\ast-grep.exe`; (b) `--rewrite ... -U` APPLIES in place (mutated repo during first run; reverted) -> use `--rewrite` WITHOUT -U for preview.
+
+**Remaining (optional):** `npx skills add ast-grep/agent-skill` rule-writing-hit-rate check (qualitative, low value).
