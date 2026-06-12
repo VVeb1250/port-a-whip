@@ -1,0 +1,17 @@
+# Gold set for the PER-PROMPT recall channel (UNPINNED lessons only).
+# Pinned universals are an always-on SessionStart channel, asserted separately — not here.
+# Queries deliberately share concrete code/English tokens with the (often Thai) lesson
+# bodies, so this measures RETRIEVAL, not translation. Cross-language cases that need
+# semantics are tagged "embed": true and only required to pass under --embed.
+{"id": "commit-heredoc", "query": "git commit here-string double quotes mangled windows", "expect": ["here-string", "writealltext", "-f"]}
+{"id": "npm-shim-subprocess", "query": "subprocess cannot launch npm global binary winerror shim", "expect": [".cmd", "shim", ".exe"]}
+{"id": "pytest-run", "query": "run pytest test suite for this repo", "expect": ["pytest"]}
+{"id": "winget-path", "query": "winget install command PATH not visible spawned process", "expect": ["winget", "path"]}
+{"id": "concurrent-write-mtime", "query": "concurrent write race guard mtime st_mtime CI", "expect": ["mtime", "st_mtime", "content"]}
+{"id": "capture-hook-status", "query": "portaw memory capture-hook status failed subcommand", "expect": ["capture-hook", "status", "--help"]}
+{"id": "json-bash-escape", "query": "JSON windows path through bash invalid escape backslash", "expect": ["escape", "json", "bash"]}
+{"id": "gh-pr-merge-stale", "query": "gh pr merge right after git push stale head", "expect": ["gh pr merge", "merge head", "push"]}
+{"id": "update-no-save", "query": "--update merge then did not save loaded old graph to_json", "expect": ["--update", "save", "to_json"]}
+{"id": "async-await", "query": "async function returns coroutine object missing await", "expect": ["await", "coroutine"], "embed": true}
+{"id": "silence-offtopic", "query": "what is the capital of france and best pasta recipe", "expect": [], "forbid": ["coroutine", "graphify", "winget", "gh pr merge", "mtime"]}
+{"id": "anchor-store-symbol", "query": "memory store upsert behavior", "expect": [], "anchors": {"symbols": ["upsert"], "paths": ["portaw/memory/store.py"]}}
