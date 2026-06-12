@@ -1221,9 +1221,10 @@
           "purpose": "Official Microsoft converter: docx/xlsx/pptx/pdf/html/images (15+ formats) → markdown that PRESERVES structure (headings, lists, tables, links) — built explicitly for LLM pipelines. One call makes a binary office file greppable/sliceable text.",
           "install": [
             {
-              "label": "install markitdown (pip, all converters)",
-              "cmd": "pip install \"markitdown[all]\"",
-              "_windows_note": "on this box: py -m pip install \"markitdown[all]\"",
+              "label": "install markitdown (pip, scoped extras — NOT [all])",
+              "cmd": "pip install \"markitdown[docx,xlsx,pptx,pdf]\"",
+              "_windows_note": "on this box: py -m pip install \"markitdown[docx,xlsx,pptx,pdf]\"",
+              "_all_trap": "AVOID `markitdown[all]` — it pins youtube-transcript-api~=1.0.0 (gone from PyPI) -> unsatisfiable -> pip SILENTLY backtracks markitdown to ancient 0.0.2 (microsoft/markitdown #1809/#1704). Scoped extras (the office/pdf converters this set needs) pin a current 0.1.x cleanly. Add the youtube/audio extras only if that capability is actually wanted.",
               "runs_vendor_code": true
             }
           ],
@@ -1269,7 +1270,7 @@
       "compat_notes": "CURATION VALUE — fills the binary-document blind spot at 0 MCP tool-defs. Non-overlapping with neighbours: web-research = remote web pages; doc-extract = LOCAL binary documents; data-query = query-shaped questions (xlsx rule: 'what does the sheet say' → markitdown render; 'sum/filter the rows' → duckdb); context-quality = library docs. N1: 0 MCP → stacks with everything. Anchor keyless/offline after pip install. SECURITY: converting UNTRUSTED documents executes parser code over hostile input — keep markitdown current (pin-at-install, bump on advisories); pairs with secure-agent.",
       "verified": {
         "date": "2026-06-12",
-        "status": "verified — INSTALL-TESTED + capability probe done 2026-06-12 on this Windows box. `py -m pip install \"markitdown[all]\"` -> `portaw verify doc-extract` gate PASS. Capability probe (bench/_docextract_probe.py): generated a docx (h1/h2 headings + 3-col table) and an xlsx (named sheet + 10 rows), converted both via markitdown -> markdown PRESERVED structure = `# Quarterly Report` + `## Summary`/`## Regional Breakdown`, table rendered as GFM `| Region | Revenue | Growth |`, xlsx sheet name + all columns + all 10 rows intact. VERDICT structure-preserving = True. ⚠️ VERSION FINDING: pip installed markitdown **0.0.2**, NOT the web-reported v0.1.6 — this box runs Python 3.14 (scoop) and the 0.1.x line appears to lack a 3.14-compatible wheel, so pip resolved the older 0.0.2 (which has no upper pin). 0.0.2 converts docx/xlsx correctly; for the 0.1.x feature set, install under Python <=3.13. delta_pct stays null (capability-class).",
+        "status": "verified — INSTALL-TESTED + capability probe done 2026-06-12 on this Windows box. `py -m pip install \"markitdown[all]\"` -> `portaw verify doc-extract` gate PASS. Capability probe (bench/_docextract_probe.py): generated a docx (h1/h2 headings + 3-col table) and an xlsx (named sheet + 10 rows), converted both via markitdown -> markdown PRESERVED structure = `# Quarterly Report` + `## Summary`/`## Regional Breakdown`, table rendered as GFM `| Region | Revenue | Growth |`, xlsx sheet name + all columns + all 10 rows intact. VERDICT structure-preserving = True. ⚠️ VERSION FINDING (root cause CORRECTED 2026-06-12): pip installed markitdown **0.0.2**, NOT v0.1.6. Cause is NOT a Python-3.14 wheel gap (markitdown 0.1.6 is pure `py3-none-any.whl`, installs fine on 3.14 with --no-deps). REAL cause = the `[all]` extra pins `youtube-transcript-api~=1.0.0`, which is no longer on PyPI (only 0.6.x then 1.2.3+), so `markitdown[all]==0.1.x` is unsatisfiable and pip SILENTLY backtracks markitdown down to 0.0.2. Known upstream: microsoft/markitdown #1809 (closed COMPLETED), #1704, #103 — NOT re-filed (duplicate). WORKAROUND (verified): install only needed extras, not `[all]` — `py -m pip install \"markitdown[docx,xlsx,pptx,pdf]==0.1.6\"` resolves 0.1.6 correctly. 0.0.2 still converts docx/xlsx fine for this set's purpose. delta_pct stays null (capability-class). TODO: switch the install step to the scoped-extras form to pin 0.1.x.",
         "config_block_confirmed": "n/a for CLI anchor; markitdown-mcp config shape from official package README (command markitdown-mcp), not host-captured",
         "token_profile_benchmarked": false,
         "hosts": ["claude-code"]
