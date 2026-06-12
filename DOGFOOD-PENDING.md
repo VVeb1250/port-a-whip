@@ -7,7 +7,7 @@
 >
 > Last updated 2026-06-13. Most-leverage first.
 >
-> ## 13. [ ] L3 memoir-edges (R13) — real-ONNX + live-transcript dogfood
+> ## 13. [x] L3 memoir-edges (R13) — real-ONNX dogfood DONE 2026-06-13 (live-transcript host-fire still open)
 >
 > Built 2026-06-13 (346 tests, all injected-encoder/synthetic): typed edges (superseded_by/
 > contradicts/caused_by/related) + suppress/contradict/1-hop-fan-out in recall + fuzzy
@@ -23,12 +23,20 @@
 >    NOT misfire on a curated store = the safe failure mode). **Defaults validated, no tuning:**
 >    LO 0.55 floor is right, HI 0.90 conservative. Remaining: re-check when the store grows
 >    near-duplicate paraphrases (the only case that exercises the supersede write live).
-> 2. **wake-pack live** — `memory inject-enable session`, fresh session in this repo, confirm
->    the `📌 paw project memory` digest injects high-confidence project lines once, ≤150 tok.
-> 3. **recall suppression end-to-end** — after a real supersede edge, the stale lesson stops
->    surfacing while its replacement is eligible.
-> 4. **`memory link` cross-store** — smoke-tested (link/phantom/edge-indicator/store-isolation);
->    needs a live lesson→decision `contradicts` link confirming fan-out surfaces the decision.
+> 2. **[x] wake-pack — DONE 2026-06-13** on the REAL project store (read-only): `project_digest`
+>    selected **2 high-confidence project lines, 111 tok ≤150**, `format_session` rendered the
+>    `📌 paw project memory` block. (Live host-fire of the SessionStart hook still pending — code
+>    path proven; the hook wiring is separately unit-tested.)
+> 3. **[x] recall suppression end-to-end — DONE 2026-06-13**, isolated home + real MiniLM:
+>    two paraphrase lessons (**cosine 0.971**) → `supersede_pairs` fired → `consolidate` wrote
+>    old `superseded_by` new (old kept fresh so it survives archive) → `recall` surfaced **new
+>    only, old suppressed** while new eligible. Verified.
+> 4. **[x] cross-store link + fan-out — DONE 2026-06-13**: lesson `related`→ project decision
+>    (cross-store), prompt matching the LESSON only → recall pulled the **decision in via 1-hop
+>    fan-out**. Also 4b: lesson `contradicts`→ higher-ranked lesson → **weaker side dropped**.
+>
+> REMAINING (host-level, not code): live SessionStart/Stop hook fire in a real CC session, and
+> the supersede WRITE path exercised only when the real store accrues a ≥0.90 paraphrase pair.
 >
 > **▶ COPY-PASTE SHEET: `bench/RUN-PROMPTS.md`** — one ready-to-paste block per
 > remaining run (groups A-F), with per-block SETUP + trials + report-back. Open it,
