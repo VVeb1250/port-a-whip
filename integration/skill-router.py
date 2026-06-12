@@ -317,6 +317,40 @@ def route(prompt, skills, graph):
         return _inline_route(prompt, skills, graph)
 
 
+def outcome_demotion(graph):
+    """kernel-unify sibling: read the settled .router-log.jsonl (via router_log)
+    for outcome-aware suppression. Returns (blacklist, demote, penalty); on any
+    error -> (empty, empty, 1.0) so routing is never affected. Like the embed /
+    session_ctx / router_log extras, this is optional-import + fail-silent."""
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        import router_log
+        return router_log.demotion(graph)
+    except Exception:
+        return set(), set(), 1.0
+
+
+def apply_outcome(results, blacklist, demote, penalty):
+    """Hard-drop blacklisted skills; soft-penalise demoted ones, then re-cut to the
+    confidence floor. Uniform over the TF-IDF and semantic paths. A demoted skill
+    whose penalised score still clears COSINE_MIN survives (strong match wins);
+    a weak demoted match falls below the floor and drops — fewer noise lines.
+    No-op when both sets are empty (== v1 behaviour)."""
+    if not results or (not blacklist and not demote):
+        return results
+    out = []
+    for cos, s in results:
+        nm = s["name"]
+        if nm in blacklist:
+            continue
+        score = cos * penalty if nm in demote else cos
+        if score >= COSINE_MIN:
+            out.append((score, s))
+    return sorted(out, key=lambda x: -x[0])
+
+
 def has_foreign_letters(text):
     """True if prompt has non-ASCII *letters* (Thai/CJK/Cyrillic/…), not just
     emoji or punctuation. Gate for the heavy semantic tier."""
@@ -433,11 +467,16 @@ def main():
         return
     idx = load_index()
     graph = load_graph()
+    # outcome-aware suppression sets from the settled fire log (fail-silent).
+    blacklist, demote, penalty = outcome_demotion(graph)
+    skills = idx.get("skills", [])
+    if blacklist:
+        skills = [s for s in skills if s["name"] not in blacklist]
     # v2: enrich the routing query with session-context signals (primer layer).
     # Empty/failed signals leave the query prompt-only == v1 behaviour.
     sig = session_signals(payload, prompt, graph)
     query = prompt if not (sig and sig.tokens) else prompt + " " + sig.tokens
-    results = route(query, idx.get("skills", []), graph)
+    results = route(query, skills, graph)
     semantic = False
     if not results and has_foreign_letters(prompt):
         # tier-2: cross-lingual semantic match (lazy, only on foreign prompts)
@@ -445,6 +484,9 @@ def main():
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         results = semantic_fallback(prompt)
         semantic = bool(results)
+    # outcome-aware: hard-drop blacklisted, soft-penalise chronic-ignored (reversible).
+    # Uniform over both the TF-IDF and the semantic path; no-op when both sets empty.
+    results = apply_outcome(results, blacklist, demote, penalty)
     # kernel-unify: paw L3 memory (+sets) rides this one hook, independent of a
     # skill match, so memory still surfaces on a prompt no skill answers.
     paw = _paw_block(prompt, payload)

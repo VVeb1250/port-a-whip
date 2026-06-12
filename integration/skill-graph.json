@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "intent_bonus": 0.34,
+  "neighbor_factor": 0.3,
+  "_session_intent_doc": "skill-router v2 primer: maps a detected session signal (error/thrash/test_fail/git/explicit) to a curated phrase folded into the routing query, repeated `weight` times. Detection regex lives in session_ctx.py; only this phrase->weight mapping is data-tunable. Absent key -> built-in default. Weight hierarchy: error > thrash/test > git/explicit.",
+  "session_intent": {
+    "error":     { "phrase": "debug stacktrace traceback runtime crash logging breakpoint", "weight": 4 },
+    "thrash":    { "phrase": "code navigation find usages semantic search callers callees", "weight": 3 },
+    "test_fail": { "phrase": "test failure debug coverage assertion regression", "weight": 3 },
+    "git":       { "phrase": "git diff commit review changes", "weight": 2 },
+    "explicit":  { "phrase": "debug troubleshoot reproduce fix", "weight": 2 }
+  },
+  "intent_map": {
+    "blast radius": ["codegraph-affected"],
+    "which tests": ["codegraph-affected"],
+    "what tests": ["codegraph-affected"],
+    "impacted tests": ["codegraph-affected"],
+    "affected tests": ["codegraph-affected"],
+    "tests to run": ["codegraph-affected"],
+    "tests should i run": ["codegraph-affected"],
+    "rerun tests": ["codegraph-affected"],
+    "test selection": ["codegraph-affected"],
+    "after this commit": ["codegraph-affected"],
+    "after my change": ["codegraph-affected"],
+    "track mistakes": ["mistake-learning"],
+    "recurring mistake": ["mistake-learning"],
+    "same mistake": ["mistake-learning"],
+    "keep making the same": ["mistake-learning"],
+    "knowledge graph": ["graphify-link"],
+    "wire codegraph": ["codegraph-link"],
+    "link codegraph": ["codegraph-link"]
+  },
+  "graph": {
+    "codegraph-affected": { "requires": ["codegraph-link"], "conflicts_with": [] },
+    "codegraph-link": { "requires": [], "conflicts_with": [] },
+    "graphify-link": { "requires": [], "conflicts_with": [] },
+    "mistake-learning": { "requires": [], "conflicts_with": [] },
+    "skill-router": { "requires": [], "conflicts_with": [] }
+  },
+  "_demote_doc": "Outcome-aware suppression, consumed by router_log.demotion(). blacklist = HARD cut: human-asserted noise that is never a real suggestion (a mode toggle active-by-default). data-driven demote (suggested >= min_suggested AND used == 0 in the settled .router-log.jsonl) applies the SOFT reversible `penalty` multiplier to the score — soft because the log's 'used' proxy undercounts Read-absorbed skills (ground-truth: ecc SKILL.md reads happen outside the router log), so any future logged use clears it. Tune min_suggested up to suppress less, penalty down to demote harder.",
+  "demote": {
+    "blacklist": ["caveman"],
+    "min_suggested": 6,
+    "penalty": 0.5
+  }
+}
