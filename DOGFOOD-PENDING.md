@@ -15,10 +15,14 @@
 > project digest at SessionStart + `memory link` CLI + dream cadence (`consolidate --every`).
 >
 > NEEDS a real run (tests inject a fake encoder, never the live MiniLM):
-> 1. **embed-seeded edges on the REAL store** — `memory consolidate` on the live store;
->    confirm `supersede_pairs` fires sane edges (no over-linking). Tune `DEFAULT_SUPERSEDE_HI`
->    (0.90) + related band (0.55–0.97) against real MiniLM cosines — synthetic vectors can't
->    calibrate the threshold.
+> 1. **[x] embed-seeded edges on the REAL store — DONE 2026-06-13, real MiniLM, read-only dry run.**
+>    26 live lessons: top pairwise cosine **0.650** (none near supersede bar). Related band
+>    [0.55,0.97) yields **4 seeds, all genuine twins** (PS-hook-bash↔`$j|&script.ps1` 0.65;
+>    `--update` merge-no-save↔`--update` dispatch 0.60); borderline 0.549 correctly excluded —
+>    **no over-linking.** `supersede_pairs` = **0** (no paraphrase-dupes; suppressive edge does
+>    NOT misfire on a curated store = the safe failure mode). **Defaults validated, no tuning:**
+>    LO 0.55 floor is right, HI 0.90 conservative. Remaining: re-check when the store grows
+>    near-duplicate paraphrases (the only case that exercises the supersede write live).
 > 2. **wake-pack live** — `memory inject-enable session`, fresh session in this repo, confirm
 >    the `📌 paw project memory` digest injects high-confidence project lines once, ≤150 tok.
 > 3. **recall suppression end-to-end** — after a real supersede edge, the stale lesson stops
