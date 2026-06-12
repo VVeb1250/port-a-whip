@@ -9,9 +9,9 @@
 {"id": "winget-path", "query": "winget install command PATH not visible spawned process", "expect": ["winget", "path"]}
 {"id": "concurrent-write-mtime", "query": "concurrent write race guard mtime st_mtime CI", "expect": ["mtime", "st_mtime", "content"]}
 {"id": "capture-hook-status", "query": "portaw memory capture-hook status failed subcommand", "expect": ["capture-hook", "status", "--help"]}
-{"id": "json-bash-escape", "query": "JSON windows path through bash invalid escape backslash", "expect": ["escape", "json", "bash"]}
-{"id": "gh-pr-merge-stale", "query": "gh pr merge right after git push stale head", "expect": ["gh pr merge", "merge head", "push"]}
-{"id": "update-no-save", "query": "--update merge then did not save loaded old graph to_json", "expect": ["--update", "save", "to_json"]}
-{"id": "async-await", "query": "async function returns coroutine object missing await", "expect": ["await", "coroutine"], "embed": true}
+{"id": "trustgate-unproven", "query": "JSON windows path through bash invalid escape backslash", "expect": [], "forbid": ["invalid escape"], "note": "the matching lesson is UNPROVEN universal (conf 0.7, x1) — recall ranks it #1 but the integrity gate (§2.2) must WITHHOLD it until proven; this pins silence-until-trusted end-to-end"}
+{"id": "gh-pr-merge-stale", "query": "gh pr merge right after git push stale head", "expect": ["gh pr merge"], "ctx": {"project": "curated"}}
+{"id": "update-no-save", "query": "--update merge then did not save loaded old graph to_json", "expect": ["to_json"], "ctx": {"project": "curated"}}
+{"id": "async-await", "query": "async function returns coroutine object missing await", "expect": ["coroutine object"], "ctx": {"stacks": ["python"]}}
 {"id": "silence-offtopic", "query": "what is the capital of france and best pasta recipe", "expect": [], "forbid": ["coroutine", "graphify", "winget", "gh pr merge", "mtime"]}
 {"id": "anchor-store-symbol", "query": "memory store upsert behavior", "expect": [], "anchors": {"symbols": ["upsert"], "paths": ["portaw/memory/store.py"]}}

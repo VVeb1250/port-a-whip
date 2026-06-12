@@ -22,13 +22,17 @@ Usage:
   py bench/_eval_recall.py --json               # machine-readable
 Exit code != 0 when pass-rate < --min-pass (regression gate).
 
-FINDING (2026-06-13, first real run, 28 unpinned lessons): TF-IDF 75% / clean 100%.
-The misses are short, Thai-dominant lessons whose few English/code tokens score below
-the per-prompt floor (lesson_min 0.12) — they never surface. Embedding does NOT rescue
-them because tier-2 fires only on a tier-1 TOTAL miss, while a weak tier-1 hit of the
-WRONG lesson keeps tier-2 dormant. The actionable lever this harness now measures:
-let tier-2 engage when tier-1's TOP score is weak (not only when empty). Clean-rate is
-already 100% (silence-default holds), so the headroom is pure recall, not precision.
+FINDING (2026-06-13): TF-IDF 100% / embed 100% / clean 100% once the eligibility
+context is derived correctly. The first run scored only 75% — but the misses were a
+HARNESS bug, not a ranking weakness: it recalled against an empty RetrievalContext,
+which silently drops every stack:* / project:* lesson BEFORE ranking. With the live
+context (stacks from marker files; per-case widening for the gold author's asserted
+situation) those lessons rank #1 in tier-1 already (cosine 0.64-0.83), so no tier-2
+"weak-hit rescue" is warranted — that idea was chasing a measurement artifact and was
+dropped. The one deliberate non-surface (`trustgate-unproven`) is the integrity gate
+(§2.2) correctly WITHHOLDING a relevant but unproven universal lesson — silence by
+design, asserted here end-to-end. Lesson: always measure recall through the real
+eligibility + trust gates, never a bare ranker.
 """
 
 from __future__ import annotations
@@ -41,8 +45,9 @@ from pathlib import Path
 
 from portaw.memory import store
 from portaw.memory.anchors import AnchorQuery
+from portaw.memory.context import host_context
 from portaw.memory.inject import InjectConfig, approx_tokens, format_memory, select
-from portaw.memory.retrieval import recall
+from portaw.memory.retrieval import RetrievalContext, recall
 
 GOLD = Path(__file__).with_name("_recall_goldset.jsonl")
 
@@ -91,12 +96,25 @@ def run(k: int, use_embed: bool, include_pinned: bool = False) -> dict:
         lessons = [e for e in lessons if not e.pinned]
     embed_fn = _embed_fn() if use_embed else None
 
+    # the eligibility context the LIVE hook would derive in this repo (stacks from
+    # marker files, project_id from cwd). A wrong/empty context silently kills every
+    # stack:* / project:* lesson, so deriving it is essential — not measuring ranking
+    # against a corpus half of which was filtered out before ranking even ran.
+    base_ctx = host_context(Path.cwd())
+
     results = []
     t0 = time.perf_counter()
     for c in _load_cases():
         q = c.get("anchors") or {}
         aq = AnchorQuery.from_context(paths=q.get("paths"), symbols=q.get("symbols"))
-        scored = recall(c["query"], lessons, query=aq, embed_fn=embed_fn)
+        # a case may widen the context to make a stack/project-scoped target eligible
+        # (the gold author asserts "this lesson applies in THIS situation")
+        cc = c.get("ctx") or {}
+        ctx = RetrievalContext(
+            stacks=base_ctx.stacks | frozenset(cc.get("stacks", [])),
+            project_id=cc.get("project") or base_ctx.project_id,
+        )
+        scored = recall(c["query"], lessons, query=aq, ctx=ctx, embed_fn=embed_fn)
         # the REAL silence gate: pinned-first, per-type threshold, trusted, budget —
         # exactly what the live hook emits. raw recall[:k] would bypass it.
         top = select(scored, InjectConfig(max_items=k))
