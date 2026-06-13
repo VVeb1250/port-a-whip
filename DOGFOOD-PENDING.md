@@ -32,11 +32,14 @@ CI job `brew-install` in `.github/workflows/ci.yml` (ubuntu-latest + macos-lates
    software", exit 1 on Linux. Fix: Linux infisical → `npm install -g @infisical/cli` (official
    cross-platform pkg, verified 0.43.93 not-deprecated, argv-safe no-root). mac keeps brew.
    sets.json `_note_linux` + `_alt_apt` (deb-repo, curl|sudo → print-only) record it.
-2. `osv-scanner` exit 127 (not found) on BOTH mac+Linux after a clean `go install`: go drops the
-   binary in `$(go env GOPATH)/bin` (~/go/bin), NOT on PATH by default. Install succeeded; tool
-   unusable. This is a real go-user gotcha, not a paw bug — `portaw verify` correctly FAILs the
-   which-probe. Fix in CI: add go bin to `$GITHUB_PATH` (mirrors a real go dev env). sets.json
-   `_note_path` documents it; `_alt_binary` (release download) avoids the PATH issue entirely.
+2. `osv-scanner` exit 127 on **Linux**: clean `go install` drops the binary in `$(go env GOPATH)/bin`
+   (~/go/bin), NOT on PATH by default. Install succeeded; tool unusable — a real go-user gotcha, not
+   a paw bug (`portaw verify` correctly FAILs the which-probe). Fix: CI adds go bin to `$GITHUB_PATH`
+   (Linux only); sets.json `_note_path_go`.
+3. `osv-scanner` exit 127 on **macOS**: deeper — **go is not preinstalled on mac runners** (and most
+   mac devs don't have a Go toolchain), so `go install` itself errors "No such file or directory: go".
+   Fix: macOS osv-scanner → `brew install osv-scanner` (formula 2.3.8, bottle = no Go needed). Linux/
+   Windows keep go-install (go present there). sets.json `_note_macos`; `_alt_brew`/`_alt_binary` kept.
 - `[~]` = CI wired + 2 findings fixed; closes [x] when a full green run lands.
 >
 > ## 13. [x] L3 memoir-edges (R13) — real-ONNX dogfood DONE 2026-06-13 (live-transcript host-fire still open)
