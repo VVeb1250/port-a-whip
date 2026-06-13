@@ -63,6 +63,11 @@ jobs:
       - name: Install portaw
         run: pip install -e .
 
+      # osv-scanner installs via `go install` → $(go env GOPATH)/bin (~/go/bin),
+      # which is NOT on PATH by default. A real go user adds it; CI mirrors that.
+      - name: Add Go bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
       - name: Install Homebrew (Linux)
         if: runner.os == 'Linux'
         run: |

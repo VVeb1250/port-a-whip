@@ -27,12 +27,17 @@ CI job `brew-install` in `.github/workflows/ci.yml` (ubuntu-latest + macos-lates
 - `_os_cmd` resolution assert + `portaw install data-query --run -y` (duckdb + jq) + full
   `secure-agent --run -y` (nah pip, gitleaks brew, osv-scanner go, infisical) → verify all on PATH.
 
-**FOUND + FIXED 2026-06-13 (first CI run, Linux):** `brew install infisical/get-cli/infisical`
-is **macOS-ONLY** — "macOS is required for this software", exit 1 on Linux. Other 3 ✓.
-Fix: Linux infisical → `npm install -g @infisical/cli` (official cross-platform pkg, verified
-0.43.93 not-deprecated, argv-safe no-root). mac keeps brew (works there). sets.json `_note_linux`
-records it; `_alt_apt` keeps the deb-repo path (curl|sudo → print-only) for reference.
-- `[~]` = CI wired + first finding fixed; closes [x] when a full green run lands (incl npm infisical).
+**FOUND + FIXED 2026-06-13 (CI runs, mac+Linux):**
+1. `brew install infisical/get-cli/infisical` is **macOS-ONLY** — "macOS is required for this
+   software", exit 1 on Linux. Fix: Linux infisical → `npm install -g @infisical/cli` (official
+   cross-platform pkg, verified 0.43.93 not-deprecated, argv-safe no-root). mac keeps brew.
+   sets.json `_note_linux` + `_alt_apt` (deb-repo, curl|sudo → print-only) record it.
+2. `osv-scanner` exit 127 (not found) on BOTH mac+Linux after a clean `go install`: go drops the
+   binary in `$(go env GOPATH)/bin` (~/go/bin), NOT on PATH by default. Install succeeded; tool
+   unusable. This is a real go-user gotcha, not a paw bug — `portaw verify` correctly FAILs the
+   which-probe. Fix in CI: add go bin to `$GITHUB_PATH` (mirrors a real go dev env). sets.json
+   `_note_path` documents it; `_alt_binary` (release download) avoids the PATH issue entirely.
+- `[~]` = CI wired + 2 findings fixed; closes [x] when a full green run lands.
 >
 > ## 13. [x] L3 memoir-edges (R13) — real-ONNX dogfood DONE 2026-06-13 (live-transcript host-fire still open)
 >

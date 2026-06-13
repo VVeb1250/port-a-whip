@@ -439,6 +439,7 @@
             {
               "label": "install osv-scanner (go)",
               "cmd": "go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest",
+              "_note_path": "go install drops the binary in $(go env GOPATH)/bin (default ~/go/bin), which is NOT on PATH unless the user added it (standard go setup). Install succeeds but `osv-scanner` is not found until ~/go/bin is on PATH. _alt_binary avoids this. (CI 2026-06-13: exit 127 until go bin added to PATH.)",
               "_alt_binary": "download from github.com/google/osv-scanner/releases",
               "runs_vendor_code": true
             }
