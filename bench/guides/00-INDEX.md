@@ -15,6 +15,31 @@ into a FRESH session:
 Then come BACK to your controlling session (this one, with context) to run the
 diff/aggregation steps below. Tick each guide in the table as you finish it.
 
+## Standing local gate — recall quality (NO fresh session, run anytime)
+
+Separate from the A/B runbooks below: the gold-set recall evaluator is a deterministic,
+single-command gate over the LIVE lesson store. Run it after any change to retrieval /
+inject / ranking / the corpus — it catches regressions the unit tests can't (does the
+right lesson surface for a realistic prompt, does silence hold, does the trust gate
+withhold unproven universals).
+
+```
+py bench/_eval_recall.py            # TF-IDF gate (reproducible). exit!=0 if pass-rate < --min-pass
+py bench/_eval_recall.py --embed    # also fuse real MiniLM (cross-lingual lift)
+py bench/_eval_recall.py --json     # machine-readable
+```
+
+Baseline on this box (2026-06-13): **12/12 = 100%, clean 100%, ~32 inject-tok**. Cases live
+in `bench/_recall_goldset.jsonl` (query → expected/forbidden body-substrings; portable, id-
+independent). Validity notes:
+- Measures the PER-PROMPT channel: pinned lessons (always-on SessionStart channel) are
+  excluded by default; `--include-pinned` to keep them.
+- Derives the real `host_context` (stacks from markers); a case may widen `ctx` for a
+  stack/project-scoped target. A bare context silently drops scoped lessons → false misses.
+- **Presence guard:** a gold target absent from the store → `MISS` + exit 2 (an empty or
+  mismatched corpus can't masquerade as green). If you see MISS, the gold set and the store
+  are out of sync — not a ranking failure.
+
 ## Order (by leverage)
 
 | # | Guide | Session type | Needs |
