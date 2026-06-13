@@ -7,7 +7,7 @@
 >
 > Last updated 2026-06-13. Most-leverage first.
 
-## 14. [~] `--run` auto-install on mac/Linux — covered by CI (`brew-install` job in ci.yml)
+## 14. [x] `--run` auto-install on mac/Linux — GREEN on real CI (ubuntu + macos), 2026-06-13
 
 Built 2026-06-13: `portaw install <set> --run` executes curated shim steps via argv
 (`shell=False`, Windows `.cmd` wrapped through `cmd /c`), confirm-gated, idempotent
@@ -40,7 +40,10 @@ CI job `brew-install` in `.github/workflows/ci.yml` (ubuntu-latest + macos-lates
    mac devs don't have a Go toolchain), so `go install` itself errors "No such file or directory: go".
    Fix: macOS osv-scanner → `brew install osv-scanner` (formula 2.3.8, bottle = no Go needed). Linux/
    Windows keep go-install (go present there). sets.json `_note_macos`; `_alt_brew`/`_alt_binary` kept.
-- `[~]` = CI wired + 2 findings fixed; closes [x] when a full green run lands.
+- `[x]` CLOSED 2026-06-13: full green run on ubuntu-latest + macos-latest (commit 8d053be).
+  data-query (duckdb/jq) + secure-agent (nah/gitleaks/osv-scanner/infisical) all install via
+  `--run -y` and verify on PATH on both OSes. 3 asserted-formulae bugs found+fixed by real runners
+  (infisical macOS-only brew → npm; osv go-bin PATH on Linux; osv no-go-toolchain on mac → brew).
 >
 > ## 13. [x] L3 memoir-edges (R13) — real-ONNX dogfood DONE 2026-06-13 (live-transcript host-fire still open)
 >
