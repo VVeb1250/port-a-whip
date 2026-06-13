@@ -41,3 +41,61 @@ jobs:
       - run: pip install build twine
       - run: python -m build
       - run: twine check dist/*
+
+  # DOGFOOD-PENDING #14 — verify brew formulae on real Linux/macOS runners.
+  # portaw install data-query --run -y: brew install duckdb + jq
+  # portaw install secure-agent --run -y: brew install gitleaks
+  # (infisical tap + osv-scanner skipped: slower, tested separately)
+  brew-install:
+    name: brew install (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install portaw
+        run: pip install -e .
+
+      - name: Install Homebrew (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          echo "/home/linuxbrew/.linuxbrew/bin" >> "$GITHUB_PATH"
+
+      - name: Verify _os_cmd resolves brew path
+        run: |
+          python - <<'EOF'
+          import sys
+          from portaw.sets.install import _current_os, _os_cmd
+          os_name = _current_os()
+          assert os_name in ("linux", "macos"), f"unexpected platform: {os_name}"
+          brew_field = {"windows": "winget install DuckDB.cli", "macos": "brew install duckdb", "linux": "brew install duckdb"}
+          cmd = _os_cmd(brew_field, os_name)
+          assert cmd == "brew install duckdb", f"bad resolution: {cmd!r}"
+          print(f"[OK] {os_name} -> {cmd!r}")
+          EOF
+
+      - name: Create dummy claude config (host_config needs the dir)
+        run: |
+          mkdir -p ~/.claude
+          echo '{"mcpServers":{}}' > ~/.claude/claude.json
+
+      - name: portaw install data-query --run -y
+        run: portaw install data-query --run -y --host claude-code
+
+      - name: Verify data-query tools on PATH
+        run: |
+          duckdb --version
+          jq --version
+
+      - name: portaw install secure-agent --run -y
+        run: portaw install secure-agent --run -y --host claude-code
+
+      - name: Verify gitleaks on PATH
+        run: gitleaks version

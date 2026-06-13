@@ -202,8 +202,12 @@
           "install": [
             {
               "label": "install rtk binary",
-              "cmd": "curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh",
-              "_alt": "brew install rtk (macOS/Linux); winget install rtk-ai.rtk (Windows)",
+              "cmd": {
+                "windows": "winget install rtk-ai.rtk",
+                "macos": "curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh",
+                "linux": "curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh"
+              },
+              "_alt": "macOS/Linux can also: brew install rtk (if tapped). Windows winget id = rtk-ai.rtk (auto-runnable).",
               "runs_vendor_code": true
             },
             {
@@ -404,9 +408,14 @@
           "purpose": "Fast (Go) regex+entropy secret scanner. Agent pipes staged content through `gitleaks ... stdin` before commit, or scans the repo. Structured JSON/SARIF output (file:line:rule:secret) = bounded, not a raw grep dump.",
           "install": [
             {
-              "label": "install gitleaks (brew)",
-              "cmd": "brew install gitleaks",
+              "label": "install gitleaks",
+              "cmd": {
+                "windows": "winget install Gitleaks.Gitleaks",
+                "macos": "brew install gitleaks",
+                "linux": "brew install gitleaks"
+              },
               "_alt_docker": "docker pull ghcr.io/gitleaks/gitleaks:latest",
+              "_alt_linux": "no apt/dnf pkg; brew (Linuxbrew) or the docker image / GitHub release binary",
               "runs_vendor_code": true
             }
           ],
@@ -452,8 +461,12 @@
           "purpose": "Injects secrets as environment variables at runtime via `infisical run -- <cmd>`. The agent calls APIs/tools that need credentials WITHOUT the raw secret ever entering the prompt/context. Directly serves the Permissions principle: least-exposure of secrets.",
           "install": [
             {
-              "label": "install infisical (winget)",
-              "cmd": "winget install infisical",
+              "label": "install infisical",
+              "cmd": {
+                "windows": "winget install infisical",
+                "macos": "brew install infisical/get-cli/infisical",
+                "linux": "brew install infisical/get-cli/infisical"
+              },
               "_alt_brew": "brew install infisical/get-cli/infisical",
               "_alt_npm": "npm install -g @infisical/cli",
               "_alt_scoop": "scoop bucket add org https://github.com/Infisical/scoop-infisical.git ; scoop install infisical",
@@ -1090,10 +1103,13 @@
           "purpose": "In-process SQL engine that queries CSV/Parquet/JSON/SQLite FILES directly (`FROM 'data.csv'`, `sqlite_scan(...)`, globs over partitioned parquet) — no import step, no server. The agent answers filter/aggregate/join questions in one bounded call instead of paging a whole data file through context.",
           "install": [
             {
-              "label": "install duckdb CLI (winget)",
-              "cmd": "winget install DuckDB.cli",
-              "_alt_brew": "brew install duckdb",
-              "_alt_sh": "curl https://install.duckdb.org | sh",
+              "label": "install duckdb CLI",
+              "cmd": {
+                "windows": "winget install DuckDB.cli",
+                "macos": "brew install duckdb",
+                "linux": "brew install duckdb"
+              },
+              "_alt_sh": "curl https://install.duckdb.org | sh (universal, but shell-pipe = print-only)",
               "runs_vendor_code": true
             }
           ],
@@ -1117,9 +1133,13 @@
           "purpose": "Command-line JSON processor: pull exactly the fields/paths needed from a large JSON file or API response instead of Read-ing the whole document. Composable with curl/gh pipelines the agent already runs.",
           "install": [
             {
-              "label": "install jq (winget)",
-              "cmd": "winget install jqlang.jq",
-              "_alt_brew": "brew install jq",
+              "label": "install jq",
+              "cmd": {
+                "windows": "winget install jqlang.jq",
+                "macos": "brew install jq",
+                "linux": "brew install jq"
+              },
+              "_alt_brew": "Linux without Linuxbrew: sudo apt/dnf/pacman install jq (distro-dependent, needs root → run manually)",
               "runs_vendor_code": true
             }
           ],

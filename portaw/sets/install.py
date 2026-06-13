@@ -23,6 +23,7 @@ class ShimStep:
     label: str
     cmd: str
     runs_vendor_code: bool
+    kind: str = "non_mcp"  # "mcp" = setup_shim build step (codegraph index) / "non_mcp" = tool install
 
 
 @dataclass
@@ -56,6 +57,32 @@ def _for_host(entry: dict, hid: str) -> bool:
     return hid in ({ha} if isinstance(ha, str) else set(ha))
 
 
+def _current_os() -> str:
+    """Local machine OS — install commands resolve against this, not the host."""
+    import sys
+
+    if sys.platform.startswith("win"):
+        return "windows"
+    if sys.platform == "darwin":
+        return "macos"
+    return "linux"
+
+
+def _os_cmd(field, os_name: str | None = None) -> str:
+    """Resolve a step's `cmd` for the current OS.
+
+    `cmd` is EITHER a string (works on every OS — pip/npm/go) OR a per-OS map
+    {windows, macos, linux} (winget/brew differ). A map missing the current OS
+    yields "" → the step is unavailable on this OS (printed with a note, never
+    auto-run, never a hard error)."""
+    os_name = os_name or _current_os()
+    if isinstance(field, str):
+        return field
+    if isinstance(field, dict):
+        return field.get(os_name, "") or ""
+    return ""
+
+
 def _gather_shim(cs: CuratedSet, hid: str) -> list[ShimStep]:
     """All manual steps for THIS host: mcp setup_shim residue + non_mcp installs.
 
@@ -68,14 +95,16 @@ def _gather_shim(cs: CuratedSet, hid: str) -> list[ShimStep]:
         shim = m.get("setup_shim") or {}
         for s in shim.get("steps", []):
             steps.append(
-                ShimStep(m["tool"], s.get("label", ""), s.get("cmd", ""), bool(s.get("runs_vendor_code")))
+                ShimStep(m["tool"], s.get("label", ""), _os_cmd(s.get("cmd", "")),
+                         bool(s.get("runs_vendor_code")), kind="mcp")
             )
     for nm in cs.non_mcp:
         if not _for_host(nm, hid):
             continue
         for s in nm.get("install", []):
             steps.append(
-                ShimStep(nm["tool"], s.get("label", ""), s.get("cmd", ""), bool(s.get("runs_vendor_code")))
+                ShimStep(nm["tool"], s.get("label", ""), _os_cmd(s.get("cmd", "")),
+                         bool(s.get("runs_vendor_code")), kind="non_mcp")
             )
     return steps
 

@@ -87,19 +87,85 @@ def sets_show(set_name: str):
 def _print_shim(steps, header: str):
     if not steps:
         return
-    click.echo(f"\n{header} (run manually — paw does NOT auto-exec vendor installers):")
+    import platform
+
+    click.echo(f"\n{header}:")
     for st in steps:
         flag = " [vendor]" if st.runs_vendor_code else ""
-        click.echo(f"  • [{st.tool}] {st.label}{flag}\n      {st.cmd}")
+        if not st.cmd:
+            click.echo(f"  • [{st.tool}] {st.label}{flag}\n"
+                       f"      (no install command for {platform.system()} — see the set's upstream docs)")
+        else:
+            click.echo(f"  • [{st.tool}] {st.label}{flag}\n      {st.cmd}")
+
+
+def _run_shim(set_name: str, steps, cs, host: str, assume_yes: bool):
+    """Execute a curated set's shim steps via argv (shell=False), after confirm.
+
+    A non_mcp tool already on PATH is skipped (idempotent; avoids vendor
+    'already installed' nonzero exits). MCP setup_shim steps (e.g. codegraph
+    index) are NEVER PATH-skipped — the binary being present does not mean the
+    build step ran. Steps needing a shell (pipe/chain) stay print-only."""
+    from portaw.sets.healthcheck import check_set
+    from portaw.sets.runner import needs_shell, run_shim_steps
+
+    if cs.raw.get("untrusted"):  # community/unverified — never auto-run (§12)
+        click.echo("\n⚠ set is untrusted — printing steps instead of running (hash/sig verify pending):")
+        _print_shim(steps, "MANUAL STEPS")
+        return
+
+    healthy = {t.tool for t in check_set(set_name, host).tools if t.status == "ok"}
+    pending = []
+    for st in steps:
+        if st.kind == "non_mcp" and st.tool in healthy:
+            click.echo(f"  · skipped (already on PATH): {st.tool}")
+        else:
+            pending.append(st)
+    if not pending:
+        click.echo("\nall install steps already satisfied.")
+        return
+
+    import platform
+
+    unavailable = [st for st in pending if not st.cmd]
+    have_cmd = [st for st in pending if st.cmd]
+    runnable = [st for st in have_cmd if not needs_shell(st.cmd)]
+    manual = [st for st in have_cmd if needs_shell(st.cmd)]
+    if unavailable:
+        click.echo(f"\nNO COMMAND for {platform.system()} (install manually — see upstream docs):")
+        for st in unavailable:
+            click.echo(f"  • [{st.tool}] {st.label}")
+    if manual:
+        click.echo("\nMANUAL (needs a shell — pipe/chain/redirect/instruction; run yourself):")
+        for st in manual:
+            click.echo(f"  • [{st.tool}] {st.cmd}")
+    if not runnable:
+        click.echo(f"\nnothing paw can auto-run. verify with: portaw verify {set_name}")
+        return
+
+    click.echo("\nWILL RUN (argv exec, shell=False — no shell metachars interpreted):")
+    for st in runnable:
+        click.echo(f"  • [{st.tool}] {st.cmd}")
+    if not assume_yes:
+        click.confirm(f"\nRun {len(runnable)} install step(s) now?", abort=True)
+    click.echo("")
+    for r in run_shim_steps(runnable, curated=True):
+        mark = "✓" if r.ok else "✗"
+        tail = "" if r.ok else f" — {r.error}"
+        click.echo(f"  {mark} [{r.tool}] {r.cmd}{tail}")
+    click.echo(f"\nverify with: portaw verify {set_name}")
 
 
 @cli.command()
 @click.argument("set_name")
 @click.option("--host", default=None, help="Target host (claude-code/codex/gemini).")
 @click.option("--force", is_flag=True, help="Re-patch even if a server is already present.")
-def install(set_name: str, host: str | None, force: bool):
-    """Install a set: auto-patch MCP config (backup+validate) + show manual shim steps."""
-    from portaw.sets.install import install_set
+@click.option("--run", "do_run", is_flag=True,
+              help="Execute the shim/install steps now (curated sets only; argv exec, no shell).")
+@click.option("--yes", "-y", "assume_yes", is_flag=True, help="Skip the confirm prompt with --run.")
+def install(set_name: str, host: str | None, force: bool, do_run: bool, assume_yes: bool):
+    """Install a set: auto-patch MCP config (backup+validate), then run or print shim steps."""
+    from portaw.sets.install import get_set, install_set
     from portaw.sets.loader import SetsError
     from portaw.sets.patcher import PatchError
 
@@ -118,7 +184,13 @@ def install(set_name: str, host: str | None, force: bool):
         click.echo(f"  · skipped (host-conditional alt — anchored to another host): {tool}")
     if not res.patched and not res.skipped:
         click.echo("  (no MCP tools in this set — all steps are manual below)")
-    _print_shim(res.shim_steps, "MANUAL STEPS")
+
+    if res.shim_steps and do_run:
+        _run_shim(res.set_name, res.shim_steps, get_set(set_name), res.host, assume_yes)
+    else:
+        _print_shim(res.shim_steps, "MANUAL STEPS")
+        if res.shim_steps:
+            click.echo("\n(re-run with --run to let paw execute these — curated set, argv exec no shell)")
     if res.ceiling_warning:
         click.echo(f"\n⚠ N1 ceiling: {res.ceiling_warning}")
 

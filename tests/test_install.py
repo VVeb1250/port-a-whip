@@ -56,6 +56,40 @@ def test_install_secure_agent_zero_mcp_all_manual_shim(tmp_host):
     assert not tmp_host.path.exists()  # nothing patched → no config written
 
 
+def test_os_cmd_string_is_os_agnostic():
+    assert install_mod._os_cmd("pip install x", "linux") == "pip install x"
+    assert install_mod._os_cmd("pip install x", "windows") == "pip install x"
+
+
+def test_os_cmd_dict_resolves_per_os():
+    field = {"windows": "winget install jqlang.jq", "macos": "brew install jq", "linux": "brew install jq"}
+    assert install_mod._os_cmd(field, "windows") == "winget install jqlang.jq"
+    assert install_mod._os_cmd(field, "macos") == "brew install jq"
+
+
+def test_os_cmd_missing_os_is_empty_not_error():
+    assert install_mod._os_cmd({"windows": "winget install x"}, "linux") == ""
+    assert install_mod._os_cmd(None, "linux") == ""
+
+
+def test_gather_shim_resolves_per_os_cmd(tmp_host, monkeypatch):
+    # data-query: duckdb/jq are per-OS dicts → resolve to the local OS's command.
+    monkeypatch.setattr(install_mod, "_current_os", lambda: "macos")
+    res = install_mod.install_set("data-query", "claude-code")
+    cmds = {s.tool: s.cmd for s in res.shim_steps}
+    assert cmds["duckdb"] == "brew install duckdb"
+    assert cmds["jq"] == "brew install jq"
+
+
+def test_shim_steps_tag_mcp_vs_non_mcp_kind(tmp_host):
+    # efficiency-starter: codegraph index = mcp setup_shim; rtk/ast-grep = non_mcp install.
+    res = install_mod.install_set("efficiency-starter", "claude-code")
+    kinds = {s.tool: s.kind for s in res.shim_steps}
+    assert kinds.get("codegraph") == "mcp"  # build step — must never be PATH-skipped
+    assert kinds.get("rtk") == "non_mcp"
+    assert kinds.get("ast-grep") == "non_mcp"
+
+
 def test_install_preserves_user_other_servers(tmp_host):
     tmp_host.path.write_text(json.dumps({"mcpServers": {"mine": {"command": "x"}}, "theme": "dark"}))
     install_mod.install_set("context-quality", "claude-code")

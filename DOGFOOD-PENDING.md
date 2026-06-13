@@ -6,6 +6,28 @@
 > result lands. Tick when done.
 >
 > Last updated 2026-06-13. Most-leverage first.
+
+## 14. [~] `--run` auto-install on mac/Linux — covered by CI (`brew-install` job in ci.yml)
+
+Built 2026-06-13: `portaw install <set> --run` executes curated shim steps via argv
+(`shell=False`, Windows `.cmd` wrapped through `cmd /c`), confirm-gated, idempotent
+PATH-skip (non_mcp only — MCP build steps like `codegraph init` never skipped),
+refuses shell-requiring steps (`curl|sh`) + `untrusted` sets. **Verified live on
+Windows** (data-query winget idempotent-skip, efficiency-starter classification).
+
+per-OS `cmd` map added to sets.json (`{windows,macos,linux}`); resolution + classification
+verified by simulation for mac/linux. **NOT run on a real mac/Linux box** — these are
+ASSERTED, not proven:
+- `brew install duckdb | jq | gitleaks` (canonical formulae, high confidence)
+- `brew install infisical/get-cli/infisical` (tap — author `_alt_brew`, medium confidence)
+- `winget install Gitleaks.Gitleaks` / `rtk-ai.rtk` (winget IDs — rtk proven on this box, gitleaks ID from package path)
+- Linux without Linuxbrew → brew step fails; `_alt_*` notes point to apt/dnf/docker (manual, distro-dependent — paw can't auto-pick a distro pkg manager that needs root).
+
+CI job `brew-install` in `.github/workflows/ci.yml` (ubuntu-latest + macos-latest) covers:
+- `_os_cmd` resolution assert + `portaw install data-query --run -y` (duckdb + jq)
+- `portaw install secure-agent --run -y` (gitleaks)
+- Skipped in CI (slower): infisical tap, osv-scanner (go install) — test manually when convenient.
+- `[~]` = CI wired; closes when first green run lands.
 >
 > ## 13. [x] L3 memoir-edges (R13) — real-ONNX dogfood DONE 2026-06-13 (live-transcript host-fire still open)
 >

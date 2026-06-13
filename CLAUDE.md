@@ -49,6 +49,8 @@ First set `efficiency-starter` (codegraph + rtk) live in [registry/sets.json](re
 Live design rules:
 - MCP install → **patcher = DEFAULT**: self-patch host config (CC/Gemini `mcpServers` JSON, Codex `[mcp_servers.<name>]` TOML). Backup → parse-validate → write. Dict-merge (preserve user's OTHER servers). Edges: create file/parent table if absent; idempotent on re-install.
 - **shim = per-tool RESIDUE** (what patch can't do): post-install build steps (codegraph index — without it codegraph is DEAD) + non-MCP installs (`rtk init -g`). Scope to host/project. pin version; NO shell=True for community strings (RCE).
+- **DECISION (2026-06-13, owner): shim steps of CURATED sets MAY auto-run** (`portaw install <set> --run`, confirm-gated, `-y` to skip). Exec = argv list via `shell=False` (shlex.split → `subprocess`, on Windows `.cmd`/`.bat` wrapped through `cmd /c` with a fixed argv) → **no shell metachar ever interpreted = no RCE**, even though steps invoke vendor installers (npm/npx/winget/brew). Default (no `--run`) still PRINTS. Guards: (1) **idempotent** — a non_mcp tool already on PATH is skipped; MCP `setup_shim` build steps (codegraph index) are NEVER PATH-skipped (binary present ≠ build ran); (2) **shell-requiring steps stay print-only** — any `cmd` with a pipe/chain/redirect/`$()`/backtick (e.g. `curl|sh`, the browser-harness NL instruction) is refused by `runner.needs_shell`, never run via argv; (3) **`untrusted:true` sets refused** (community/Phase-4 — until hash/sig). This NARROWS, never widens, §12: the ban was always shell=True + community strings, not author-vetted argv. [[shim-curated-autorun]] · `portaw/sets/runner.py`.
+- **per-OS install (2026-06-13)**: a step's `cmd` is EITHER a string (all-OS — pip/npm/go) OR a map `{windows,macos,linux}` (winget/brew differ). `install._os_cmd` resolves against the LOCAL machine OS (`sys.platform`), not the host. A map missing the current OS → `""` → step printed "no command for <OS>", never a hard error. winget(win)/brew(mac+Linuxbrew) populated for duckdb/jq/gitleaks/infisical + rtk(winget win / curl|sh mac+linux=print-only). ⚠️ mac/Linux formulae ASSERTED not live-tested → DOGFOOD #14.
 - **DECISION (2026-06-05, advisor-vetted): do NOT delegate config-patching to a tool's own installer**, even when it self-installs. Delegating = runs vendor code, no uniform backup/rollback/`portaw remove`, codegraph installer is interactive + patches ALL hosts (can't host-scope). Config entry is uniform `{command,args,env}`; per-installer adapter = bespoke = MORE work as registry grows. Use `install --print-config {host}` only to FETCH the canonical block; paw owns the write.
 - `token_profile` per-host (CC lazy-loads → ~0 idle; Codex/Gemini load all → real overhead). Vendor-claimed numbers flagged UNVERIFIED.
 - **set-size ceiling (N1)**: ≤ ~2-3 active MCP servers/set (load-all hosts; 50 tools ≈ 72K token defs; accuracy drops past 2-3). Count MCP only (non-MCP hooks add 0 def). Fine lever: per-server env `tool_subset` (e.g. `CODEGRAPH_MCP_TOOLS`) trims unused defs WITHOUT dropping the server.
@@ -102,7 +104,7 @@ portaw memory inject-enable session|tool|all
 - [x] schema v0.3.0 + 3 sets (efficiency-starter, secure-agent, context-quality), all `trigger_terms`.
 - [x] B1 bench (`portaw bench`, wraps ccusage) → token-delta gate. portaw/bench.py (8 tests). Windows npx via fixed-literal shell=True (no injection).
 - [x] codegraph+rtk config captured 2026-06-05. **codegraph = bare `codegraph serve --mcp` stdio** (NOT npx; cursor adds `--path ${workspaceFolder}`). rtk = PreToolUse/Bash `rtk hook claude`. fields `mcp_config` + `mcp_config_per_host` + `hook_entry`.
-- [x] install/remove → patcher (json+toml dict-merge, backup, re-parse validate, idempotent) + orchestrator (N1 warn). shim = PRINTED manual steps (0 RCE). loader.py.
+- [x] install/remove → patcher (json+toml dict-merge, backup, re-parse validate, idempotent) + orchestrator (N1 warn). shim = PRINTED by default; `--run` auto-executes curated sets via argv `shell=False` (confirm-gated, idempotent PATH-skip, refuses untrusted) — `portaw/sets/runner.py`, 7 tests. loader.py.
 - [x] verify → healthcheck.py (which-probe, `health_binary` opt, config-only allowed) = §10 gate half (deterministic, offline).
 - [x] doctor + host detection (CC/codex live, parse-validate, registry load).
 - [x] sets list/show (reads registry).
@@ -149,7 +151,7 @@ portaw memory inject-enable session|tool|all
 - Node 18+ only at *set runtime* if a set's tool runs via npx (not a paw dep)
 
 ## Security
-- non-MCP install: NO shell=True for community sets (RCE). hash/signature verify before community sets (Phase 4).
+- non-MCP install: NO shell=True, ever (RCE). Curated sets DO auto-run via `--run` but only as argv (`shell=False`, no metachar interp) — see Live design rules. Community/`untrusted` sets stay print-only; hash/signature verify gates them before auto-run (Phase 4).
 - env: `.env` + `${VAR}` ref, never plaintext secret in config
 - MCP source = curated sets only (reviewed before entry), not arbitrary registry → small surface
 - patch config: backup + parse-validate before write (avoid corrupt config)
