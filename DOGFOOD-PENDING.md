@@ -45,7 +45,7 @@ CI job `brew-install` in `.github/workflows/ci.yml` (ubuntu-latest + macos-lates
   `--run -y` and verify on PATH on both OSes. 3 asserted-formulae bugs found+fixed by real runners
   (infisical macOS-only brew → npm; osv go-bin PATH on Linux; osv no-go-toolchain on mac → brew).
 >
-> ## 13. [x] L3 memoir-edges (R13) — real-ONNX dogfood DONE 2026-06-13 (live-transcript host-fire still open)
+> ## 13. [x] L3 memoir-edges (R13) — real-ONNX + live host-fire DONE 2026-06-13 (SessionStart inject + Stop bump both PASS live; only cold new-lesson stays manual/nudge by design)
 >
 > Built 2026-06-13 (346 tests, all injected-encoder/synthetic): typed edges (superseded_by/
 > contradicts/caused_by/related) + suppress/contradict/1-hop-fan-out in recall + fuzzy
@@ -87,11 +87,16 @@ CI job `brew-install` in `.github/workflows/ci.yml` (ubuntu-latest + macos-lates
 >   store (pins still fire); that looked like a digest miss but is correct scoping.
 > - **Stop-capture plumbing = PASS** — synthetic Stop payload (`{"paw_lesson":{...}}` | `memory capture-hook`)
 >   wrote a lesson (universal) + cleaned up; PostToolUse **nudge** fired on a repeated real failure.
-> - **KEY FINDING (the actually-open piece): vanilla CC emits NO `paw_lesson` in the Stop payload** — it
->   carries `transcript_path` only. So the reliable explicit-field path never auto-fires in a plain
->   session, and the NL transcript detector yields ~0 (documented floor). ⇒ **plain-session auto-capture
->   does not happen by design.** Working capture paths (all proven): nudge→`memory add`, manual `memory add`,
->   `harvest`, + the author's mistake-learning Stop hook (coexists). Not a bug — confirms the §13 detector floor.
+> - **Stop end-to-end BUMP path = PASS (live, 2026-06-13):** repeated the `??` PS-null-coalesce failure
+>   in a real session → Stop fired → the pinned `??` lesson `9bcc3168` bumped **×7→×8**, total count
+>   **39→39 (bump, not a new entry)** — `upsert` matched the existing content-hash id (body→id stable) and
+>   `bumped()` raised recurrence + reinforced confidence. **The highest-value path (a recurring known
+>   mistake getting LOUDER each repeat) auto-fires live** via the Stop hook.
+> - **KEY DISTINCTION — only COLD-START new-lesson is silent:** a NEVER-SEEN failure → NEW entry still
+>   yields ~0 from the NL transcript detector (vanilla CC Stop payload carries `transcript_path` only, no
+>   `paw_lesson`; the pairing rarely fires — documented §13 floor). New-lesson capture relies on:
+>   nudge→`memory add`, manual `memory add`, `harvest`, or an explicit `paw_lesson` emitter. So: **recurrence
+>   bump of an existing lesson = LIVE; cold new-lesson = manual/nudge.** Not a bug.
 > - **tier-2 observability** — `memory recall --explain` now prints a `retrieval tier:` line (the live run
 >   couldn't tell MiniLM from the TF-IDF floor; root cause = CLI wires embed only under `--embed`).
 >
