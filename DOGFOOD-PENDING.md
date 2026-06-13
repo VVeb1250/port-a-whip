@@ -24,10 +24,15 @@ ASSERTED, not proven:
 - Linux without Linuxbrew → brew step fails; `_alt_*` notes point to apt/dnf/docker (manual, distro-dependent — paw can't auto-pick a distro pkg manager that needs root).
 
 CI job `brew-install` in `.github/workflows/ci.yml` (ubuntu-latest + macos-latest) covers:
-- `_os_cmd` resolution assert + `portaw install data-query --run -y` (duckdb + jq)
-- `portaw install secure-agent --run -y` (gitleaks)
-- Skipped in CI (slower): infisical tap, osv-scanner (go install) — test manually when convenient.
-- `[~]` = CI wired; closes when first green run lands.
+- `_os_cmd` resolution assert + `portaw install data-query --run -y` (duckdb + jq) + full
+  `secure-agent --run -y` (nah pip, gitleaks brew, osv-scanner go, infisical) → verify all on PATH.
+
+**FOUND + FIXED 2026-06-13 (first CI run, Linux):** `brew install infisical/get-cli/infisical`
+is **macOS-ONLY** — "macOS is required for this software", exit 1 on Linux. Other 3 ✓.
+Fix: Linux infisical → `npm install -g @infisical/cli` (official cross-platform pkg, verified
+0.43.93 not-deprecated, argv-safe no-root). mac keeps brew (works there). sets.json `_note_linux`
+records it; `_alt_apt` keeps the deb-repo path (curl|sudo → print-only) for reference.
+- `[~]` = CI wired + first finding fixed; closes [x] when a full green run lands (incl npm infisical).
 >
 > ## 13. [x] L3 memoir-edges (R13) — real-ONNX dogfood DONE 2026-06-13 (live-transcript host-fire still open)
 >

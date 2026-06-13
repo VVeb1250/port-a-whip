@@ -42,10 +42,11 @@ jobs:
       - run: python -m build
       - run: twine check dist/*
 
-  # DOGFOOD-PENDING #14 — verify brew formulae on real Linux/macOS runners.
-  # portaw install data-query --run -y: brew install duckdb + jq
-  # portaw install secure-agent --run -y: brew install gitleaks
-  # (infisical tap + osv-scanner skipped: slower, tested separately)
+  # DOGFOOD-PENDING #14 — verify per-OS install commands on real Linux/macOS runners.
+  # data-query --run -y  : duckdb + jq (brew)
+  # secure-agent --run -y: nah (pip) + gitleaks (brew) + osv-scanner (go) + infisical
+  #   infisical: brew tap is macOS-ONLY → Linux uses npm @infisical/cli (CI proved
+  #   the brew formula fails on Linux 2026-06-13; npm is the cross-platform path).
   brew-install:
     name: brew install (${{ matrix.os }})
     strategy:
@@ -97,5 +98,9 @@ jobs:
       - name: portaw install secure-agent --run -y
         run: portaw install secure-agent --run -y --host claude-code
 
-      - name: Verify gitleaks on PATH
-        run: gitleaks version
+      - name: Verify secure-agent tools on PATH
+        run: |
+          gitleaks version
+          osv-scanner --version
+          infisical --version
+          nah --version

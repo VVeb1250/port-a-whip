@@ -465,10 +465,12 @@
               "cmd": {
                 "windows": "winget install infisical",
                 "macos": "brew install infisical/get-cli/infisical",
-                "linux": "brew install infisical/get-cli/infisical"
+                "linux": "npm install -g @infisical/cli"
               },
+              "_note_linux": "brew tap infisical/get-cli is macOS-ONLY (CI 2026-06-13: 'macOS is required for this software' on Linux). Linux uses the official cross-platform npm package @infisical/cli (argv-safe, no root). apt/rpm repos exist but need curl|sudo (shell+root -> would be print-only).",
               "_alt_brew": "brew install infisical/get-cli/infisical",
               "_alt_npm": "npm install -g @infisical/cli",
+              "_alt_apt": "curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | sudo -E bash && sudo apt-get install -y infisical",
               "_alt_scoop": "scoop bucket add org https://github.com/Infisical/scoop-infisical.git ; scoop install infisical",
               "runs_vendor_code": true
             }
