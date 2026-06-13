@@ -79,6 +79,22 @@ CI job `brew-install` in `.github/workflows/ci.yml` (ubuntu-latest + macos-lates
 > old→new pair, `consolidate` wrote the edge, `recall` surfaced new-only / old-suppressed. So the
 > only thing the synthetic verification can't cover is the host event wiring firing in a fresh CC.
 >
+> **LIVE HOST-FIRE RUN 2026-06-13 (fresh CC sessions) — mostly CLOSED:**
+> - **SessionStart inject = PASS** — both `💡 pins` + `📌 project memory` digest blocks fired in a
+>   fresh in-repo session. Surfaced + FIXED a dead-tag bug: 7/11 project lessons were `project:project`
+>   (old-seed placeholder leaked into applicability) → eligible nowhere → retagged `project:port-a-whip`
+>   (commit 447718a). NOTE: project memory is repo-scoped — a session OUTSIDE the repo finds no project
+>   store (pins still fire); that looked like a digest miss but is correct scoping.
+> - **Stop-capture plumbing = PASS** — synthetic Stop payload (`{"paw_lesson":{...}}` | `memory capture-hook`)
+>   wrote a lesson (universal) + cleaned up; PostToolUse **nudge** fired on a repeated real failure.
+> - **KEY FINDING (the actually-open piece): vanilla CC emits NO `paw_lesson` in the Stop payload** — it
+>   carries `transcript_path` only. So the reliable explicit-field path never auto-fires in a plain
+>   session, and the NL transcript detector yields ~0 (documented floor). ⇒ **plain-session auto-capture
+>   does not happen by design.** Working capture paths (all proven): nudge→`memory add`, manual `memory add`,
+>   `harvest`, + the author's mistake-learning Stop hook (coexists). Not a bug — confirms the §13 detector floor.
+> - **tier-2 observability** — `memory recall --explain` now prints a `retrieval tier:` line (the live run
+>   couldn't tell MiniLM from the TF-IDF floor; root cause = CLI wires embed only under `--embed`).
+>
 > **▶ COPY-PASTE SHEET: `bench/RUN-PROMPTS.md`** — one ready-to-paste block per
 > remaining run (groups A-F), with per-block SETUP + trials + report-back. Open it,
 > copy a block into a FRESH session. Backed by:
