@@ -971,10 +971,11 @@ def memory_sync(remote_url: str | None):
 @memory.command("harvest")
 @click.option("--file", "src", default=None,
               help="mistakes-index.md (default: ~/.claude/rules/mistakes-index.md).")
-@click.option("--project", "project_id", default="curated",
-              help="Project id for project-scoped mistakes (no stack/env hint).")
+@click.option("--project", "project_id", default=None,
+              help="Project id for project-scoped mistakes. Omit → unclassified "
+                   "lessons fall to universal (a placeholder would orphan them).")
 @click.option("--confirm", is_flag=True, help="Write harvested lessons to the global store.")
-def memory_harvest(src: str | None, project_id: str, confirm: bool):
+def memory_harvest(src: str | None, project_id: str | None, confirm: bool):
     """Harvest a curated mistakes-index.md into global lessons (idempotent re-key by id)."""
     from dataclasses import replace
 

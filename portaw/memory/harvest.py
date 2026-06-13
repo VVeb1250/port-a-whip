@@ -55,9 +55,14 @@ def _section_stack(section: str) -> str:
     return ""
 
 
-def _applicability(section: str, body: str, project_id: str) -> str:
+def _applicability(section: str, body: str, project_id: str | None) -> str:
     """Map (section, body) → an applicability tag (§2.1). Section header wins; then
-    the body keyword heuristic; env/shell → universal; otherwise project-scoped."""
+    the body keyword heuristic; env/shell → universal. An unclassified lesson is
+    project-scoped ONLY when the caller named a real project — otherwise it falls to
+    `universal`. A placeholder project_id (the old `curated` default) would orphan the
+    lesson forever: no live host_context ever derives that name, so it could never
+    surface. Universal is the safe default — the trust gate still withholds an
+    unproven one, so it can't spam, but it CAN surface once it earns confidence."""
     stack = _section_stack(section)
     if stack:
         return f"stack:{stack}"
@@ -66,11 +71,11 @@ def _applicability(section: str, body: str, project_id: str) -> str:
         return f"stack:{stack_kw}"
     if env_kw or _ENV_SECTION_RE.search(section):
         return "universal"
-    return f"project:{project_id}"
+    return f"project:{project_id}" if project_id else "universal"
 
 
 def parse_line(
-    line: str, section: str, project_id: str, today: str, detail_ref_base: str = ""
+    line: str, section: str, project_id: str | None, today: str, detail_ref_base: str = ""
 ) -> MemoryEntry | None:
     """One index bullet → one lesson MemoryEntry. None if the line isn't a mistake bullet."""
     m = _BULLET.match(line.strip())
@@ -115,7 +120,7 @@ def parse_line(
 def harvest_mistakes_file(
     path: Path | str,
     *,
-    project_id: str = "curated",
+    project_id: str | None = None,
     today: str | None = None,
     detail_ref_base: str | None = None,
 ) -> list[MemoryEntry]:

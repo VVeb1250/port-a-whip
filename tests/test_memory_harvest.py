@@ -86,11 +86,22 @@ def test_applicability_shell_section_is_universal(tmp_path):
     assert by_term["ps-null-coalesce"].applicability == "universal"
 
 
-def test_applicability_workflow_falls_back_to_project(tmp_path):
+def test_applicability_unclassified_defaults_to_universal(tmp_path):
+    # no project_id passed → an unclassified lesson must NOT be tagged to a placeholder
+    # project (which would orphan it forever); it falls to universal instead.
     p = tmp_path / "mistakes-index.md"
     _write(p, _SAMPLE)
     by_term = {e.trigger_terms[0]: e for e in harvest_mistakes_file(p, today="2026-06-10")}
-    assert by_term["graphify-save"].applicability == "project:curated"
+    assert by_term["graphify-save"].applicability == "universal"
+
+
+def test_applicability_scopes_to_named_project_when_given(tmp_path):
+    # an explicit project_id still project-scopes the unclassified lesson
+    p = tmp_path / "mistakes-index.md"
+    _write(p, _SAMPLE)
+    by_term = {e.trigger_terms[0]: e
+               for e in harvest_mistakes_file(p, project_id="graphify", today="2026-06-10")}
+    assert by_term["graphify-save"].applicability == "project:graphify"
 
 
 def test_detail_ref_points_at_sibling_when_present(tmp_path):
