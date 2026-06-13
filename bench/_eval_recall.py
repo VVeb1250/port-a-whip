@@ -87,6 +87,11 @@ def run(k: int, use_embed: bool, include_pinned: bool = False) -> dict:
         lessons += store.load_project(Path.cwd())
     except Exception:
         pass
+    # corpus presence check, computed over the FULL store (incl. pinned) BEFORE any
+    # filtering: a gold case whose target lesson is simply absent here (fresh box, a
+    # different corpus) must be flagged MISSING — never silently counted as a PASS,
+    # which would let an empty store vacuously score 100% in CI.
+    corpus_text = " ".join(e.body.lower() for e in lessons)
     # pinned lessons are an ALWAYS-ON channel delivered ONCE at SessionStart (session-
     # hook), and the per-prompt path dedupes whatever that channel already showed. This
     # harness measures the PER-PROMPT recall channel, so by default it excludes pinned —
@@ -130,24 +135,31 @@ def run(k: int, use_embed: bool, include_pinned: bool = False) -> dict:
         # under --embed. Under pure TF-IDF it is reported but does not fail the gate.
         embed_only = c.get("embed", False)
         skipped = embed_only and not embed_fn
+        # a positive case whose target text isn't anywhere in this store is MISSING, not
+        # failing: the corpus lacks it (different/empty store). Excluded from the rate so
+        # it can't vacuously pass, but surfaced loudly so CI on the wrong corpus is caught.
+        missing = bool(expect) and not any(sub in corpus_text for sub in expect)
         # silence case (expect == []) passes only when nothing forbidden surfaced
         ok = (hit and clean) or skipped
         results.append({
             "id": c["id"], "ok": ok, "hit": hit, "clean": clean, "skipped": skipped,
+            "missing": missing,
             "surfaced": len(top), "tokens": approx_tokens(format_memory(top)),
             "leaked": surfaced_forbidden,
         })
     elapsed = time.perf_counter() - t0
 
-    n = len(results)
-    passed = sum(r["ok"] for r in results)
+    scored_cases = [r for r in results if not r["missing"]]
+    n = len(scored_cases)
+    passed = sum(r["ok"] for r in scored_cases)
     return {
         "cases": n,
         "passed": passed,
+        "missing": sum(r["missing"] for r in results),
         "pass_rate": passed / n if n else 0.0,
-        "hit_rate": sum(r["hit"] for r in results) / n if n else 0.0,
-        "clean_rate": sum(r["clean"] for r in results) / n if n else 0.0,
-        "avg_tokens": round(sum(r["tokens"] for r in results) / n, 1) if n else 0.0,
+        "hit_rate": sum(r["hit"] for r in scored_cases) / n if n else 0.0,
+        "clean_rate": sum(r["clean"] for r in scored_cases) / n if n else 0.0,
+        "avg_tokens": round(sum(r["tokens"] for r in scored_cases) / n, 1) if n else 0.0,
         "elapsed_s": round(elapsed, 3),
         "lessons": len(lessons),
         "embed": embed_fn is not None,
@@ -172,17 +184,32 @@ def main(argv: list[str]) -> int:
         print(f"lessons={rep['lessons']}  embed={rep['embed']}  k={a.k}  "
               f"({rep['elapsed_s']}s)")
         for r in rep["results"]:
-            mark = "SKIP" if r["skipped"] else ("PASS" if r["ok"] else "FAIL")
+            if r["missing"]:
+                mark = "MISS"
+            elif r["skipped"]:
+                mark = "SKIP"
+            else:
+                mark = "PASS" if r["ok"] else "FAIL"
             why = "" if r["ok"] else (
                 f"  leaked={r['leaked']}" if r["leaked"] else "  (expected lesson not in top-K)")
-            if r["skipped"]:
+            if r["missing"]:
+                why = "  (target absent from this store — not scored)"
+            elif r["skipped"]:
                 why = "  (embed-only case; run --embed to require it)"
             print(f"  {mark}  {r['id']:24} surfaced={r['surfaced']} "
                   f"tok={r['tokens']}{why}")
+        miss = f"  MISSING={rep['missing']}" if rep["missing"] else ""
         print(f"\npass {rep['passed']}/{rep['cases']} = {rep['pass_rate']:.0%}  "
               f"hit={rep['hit_rate']:.0%}  clean={rep['clean_rate']:.0%}  "
-              f"avg_inject_tok={rep['avg_tokens']}")
+              f"avg_inject_tok={rep['avg_tokens']}{miss}")
+        if rep["missing"]:
+            print("  ! some gold targets are absent from this store — gold set and corpus "
+                  "are out of sync (or running on the wrong box). Failing loudly.")
 
+    # gate fails if quality dips OR any target is missing (don't let an empty/wrong
+    # corpus masquerade as green)
+    if rep["missing"]:
+        return 2
     return 0 if rep["pass_rate"] >= a.min_pass else 1
 
 
