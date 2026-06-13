@@ -149,6 +149,23 @@ def _dedup_hits(hits: list[Hit], session_id: str) -> list[Hit]:
         return hits
 
 
+def _debug_scoped_drop(entries, ctx) -> None:
+    """Opt-in (PAW_DEBUG) stderr warning when this host context makes scoped lessons
+    ineligible — the silent-miss the live hook otherwise hides. Off by default
+    (a hook firing every prompt must not spam); fail-safe."""
+    import os
+
+    if not os.environ.get("PAW_DEBUG"):
+        return
+    try:
+        from portaw.memory.context import scoped_drop_report
+
+        for line in scoped_drop_report(entries, ctx):
+            sys.stderr.write(f"paw[debug] scoped lesson dropped — {line}\n")
+    except Exception:
+        pass
+
+
 def memory_block(prompt: str, cwd: str | None = None, session_id: str = "") -> str:
     """L3 recall for the live hook. Safe → '' on any error.
 
@@ -167,7 +184,9 @@ def memory_block(prompt: str, cwd: str | None = None, session_id: str = "") -> s
         entries = load_lessons() + load_project()
         if not entries:
             return ""
-        scored = recall(prompt, entries, ctx=host_context(cwd),
+        ctx = host_context(cwd)
+        _debug_scoped_drop(entries, ctx)
+        scored = recall(prompt, entries, ctx=ctx,
                         embed_fn=lazy_embedder())
         if not session_id:
             # no session id = no dedup log: a floor-bypassing pin would re-inject

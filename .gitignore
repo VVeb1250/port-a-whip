@@ -30,3 +30,6 @@ bench/out/
 # OS
 .DS_Store
 Thumbs.db
+
+# L3 store backups (curation safety copies, machine-local)
+.paw/memory/*.bak-*

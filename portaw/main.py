@@ -342,6 +342,27 @@ def bench_ab(baseline_id: str, treated_id: str, agent: str | None, as_json: bool
     click.echo(_json.dumps(d, indent=2) if as_json else format_report(d))
 
 
+@bench.command("gain")
+@click.argument("set_name")
+@click.option("--host", default="claude-code", help="Host whose install date anchors the split.")
+@click.option("--agent", default="claude", help="ccusage agent rows: claude/codex/gemini.")
+def bench_gain(set_name: str, host: str, agent: str):
+    """Auto-attribute token delta for a set using its install date as the A/B split.
+
+    Directional only (uncontrolled windows) — for a defensible number run
+    `bench ab` on an identical task. Inconclusive below 2 sessions a side."""
+    from portaw.bench import CcusageError
+    from portaw.sets.gain import format_report, gain_for_set
+
+    try:
+        rep = gain_for_set(set_name, host=host, agent=agent)  # type: ignore[arg-type]
+    except CcusageError as e:
+        raise click.ClickException(str(e)) from e
+    except ValueError as e:
+        raise click.ClickException(str(e)) from e
+    click.echo(format_report(rep))
+
+
 @bench.command("how")
 def bench_how():
     """Print the A/B protocol (controlled-workload requirement)."""
@@ -463,6 +484,18 @@ def router_status(host: str | None):
     except ValueError as e:
         raise click.ClickException(str(e)) from e
     click.echo(f"host={st['host']} event={st['event']} wired={st['wired']} settings={st['settings']}")
+    # Surface the silent demotion loop: a set the router stopped suggesting leaves
+    # no trace in wiring state, so a confused "why isn't X surfacing?" has no answer
+    # here. Name the demoted sets + how to undo (`router outcomes --forget`).
+    try:
+        from portaw.memory import outcomes
+
+        demoted = sorted(outcomes.demoted_names())
+        if demoted:
+            click.echo(f"demoted (suggested ≥{outcomes.DEMOTE_MIN_SUGGESTED}, never used; "
+                       f"`router outcomes --forget <name>` to reset): {', '.join(demoted)}")
+    except Exception:
+        pass
 
 
 @cli.group()
@@ -480,14 +513,16 @@ def memory():
               help="Project id for project:* eligibility (default: cwd name).")
 @click.option("--embed", "use_embed", is_flag=True,
               help="Enable tier-2 semantic fallback (cross-lingual/paraphrase; needs [embed] extra).")
+@click.option("--explain", is_flag=True,
+              help="Report scoped lessons this context makes ineligible (silent-miss check).")
 def memory_recall(prompt: tuple[str, ...], symbols: tuple[str, ...],
                   paths: tuple[str, ...], stacks: tuple[str, ...],
-                  project_id: str | None, use_embed: bool):
+                  project_id: str | None, use_embed: bool, explain: bool):
     """Dry-run retrieval: what memory would inject for a prompt (+ optional edit-target)."""
     from pathlib import Path
 
     from portaw.memory.anchors import AnchorQuery
-    from portaw.memory.context import host_context
+    from portaw.memory.context import host_context, scoped_drop_report
     from portaw.memory.inject import format_memory, select
     from portaw.memory.retrieval import recall
     from portaw.memory.store import load_lessons, load_project
@@ -507,6 +542,23 @@ def memory_recall(prompt: tuple[str, ...], symbols: tuple[str, ...],
     # silently — derive one from the cwd so scoped lessons can actually fire.
     ctx = host_context(Path.cwd(), stacks=frozenset(stacks) or None,
                        project_id=project_id)
+    if explain:
+        report = scoped_drop_report(entries, ctx)
+        if report:
+            click.echo("scoped lessons ineligible in THIS context (not a ranking miss):", err=True)
+            for line in report:
+                click.echo(f"  ⚠ {line}", err=True)
+        else:
+            click.echo("no scoped lessons dropped by this context.", err=True)
+        # which retrieval tier actually ran — absent this, a TF-IDF score is
+        # indistinguishable from an embed cosine, so "did tier-2 fire?" is unanswerable.
+        if embed_fn is not None:
+            tier = "tier-1 TF-IDF + tier-2 MiniLM (tier-2 fires only on tier-1 misses)"
+        elif use_embed:
+            tier = "tier-1 TF-IDF only (tier-2 requested but model/libs unavailable)"
+        else:
+            tier = "tier-1 TF-IDF only — pass --embed for tier-2 MiniLM (paraphrase/cross-lingual)"
+        click.echo(f"retrieval tier: {tier}", err=True)
     scored = recall(" ".join(prompt), entries, query=q, ctx=ctx, embed_fn=embed_fn)
     selected = select(scored)
     block = format_memory(selected)
@@ -517,6 +569,32 @@ def memory_recall(prompt: tuple[str, ...], symbols: tuple[str, ...],
     for s in selected:
         click.echo(f"    score={s.score:.3f} rel={s.relevance:.2f} "
                    f"anchor={s.anchor:.2f} act={s.activation:.2f} type={s.entry.type}")
+
+
+@memory.command("health")
+@click.option("--backfill", is_flag=True,
+              help="Fill trigger_terms from each body for lessons missing them (backup first).")
+def memory_health(backfill: bool):
+    """Report metadata unevenness (recall = f(metadata)) and optionally backfill it."""
+    import shutil
+    import time
+
+    from portaw.memory.health import backfill_trigger_terms, format_report, metadata_report
+    from portaw.memory.store import global_dir, load_lessons, save_lessons
+
+    lessons = load_lessons()
+    click.echo(format_report(metadata_report(lessons)))
+    if not backfill:
+        return
+    new, changed = backfill_trigger_terms(lessons)
+    if not changed:
+        click.echo("nothing to backfill.")
+        return
+    lf = global_dir() / "lessons.jsonl"
+    bak = lf.with_name(f"lessons.jsonl.bak-{time.strftime('%Y%m%dT%H%M%S')}")
+    shutil.copy2(lf, bak)
+    save_lessons(new)
+    click.echo(f"backfilled trigger_terms on {changed} lessons (backup {bak.name}).")
 
 
 @memory.command("list")

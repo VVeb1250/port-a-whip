@@ -73,8 +73,11 @@ CI job `brew-install` in `.github/workflows/ci.yml` (ubuntu-latest + macos-lates
 >    (cross-store), prompt matching the LESSON only → recall pulled the **decision in via 1-hop
 >    fan-out**. Also 4b: lesson `contradicts`→ higher-ranked lesson → **weaker side dropped**.
 >
-> REMAINING (host-level, not code): live SessionStart/Stop hook fire in a real CC session, and
-> the supersede WRITE path exercised only when the real store accrues a ≥0.90 paraphrase pair.
+> REMAINING (host-level, not code): live SessionStart/Stop hook fire in a real CC session.
+> The supersede WRITE path is now proven at the BOUNDARY too — re-verified 2026-06-13 with real
+> MiniLM at **cosine 0.908** (just over the 0.90 bar): `supersede_pairs` fired the correct
+> old→new pair, `consolidate` wrote the edge, `recall` surfaced new-only / old-suppressed. So the
+> only thing the synthetic verification can't cover is the host event wiring firing in a fresh CC.
 >
 > **▶ COPY-PASTE SHEET: `bench/RUN-PROMPTS.md`** — one ready-to-paste block per
 > remaining run (groups A-F), with per-block SETUP + trials + report-back. Open it,

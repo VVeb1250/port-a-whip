@@ -62,8 +62,25 @@ def test_enters_hot_threshold():
 def test_classify_detects_env_and_stack():
     env, stack = classify_text("running python on windows path failed")
     assert env and stack == ""
+    # django is a python framework → the CANONICAL derivable tag is python, never the
+    # dead "django" (no marker derives stack:django → it'd be eligible nowhere).
     env2, stack2 = classify_text("django migration conflict in models")
-    assert stack2 == "django"
+    assert stack2 == "python"
+
+
+def test_classify_maps_test_runner_to_language_stack():
+    # the stack:pytest dead-tag bug: pytest must canonicalize to python
+    _, stack = classify_text("py -m pytest tests failed → rerun with -x")
+    assert stack == "python"
+
+
+def test_stack_keyword_values_are_all_derivable():
+    # the guard: every classifier stack value MUST be a stack detect_stacks() can emit,
+    # or it mints a tag eligible nowhere. Pins the two vocabularies together forever.
+    from portaw.memory.capture import _STACK_KEYWORDS
+    from portaw.memory.context import STACK_MARKERS
+
+    assert set(_STACK_KEYWORDS.values()) <= set(STACK_MARKERS.values())
 
 
 def test_infer_applicability_env_is_universal():
@@ -73,7 +90,7 @@ def test_infer_applicability_env_is_universal():
 
 def test_infer_applicability_framework_is_stack():
     sig = FailureSignal(trigger="django migration ordering", fix="add dependency")
-    assert infer_applicability(sig, "paw") == "stack:django"
+    assert infer_applicability(sig, "paw") == "stack:python"  # canonical, not dead stack:django
 
 
 def test_infer_applicability_default_is_project():
@@ -84,6 +101,12 @@ def test_infer_applicability_default_is_project():
 def test_explicit_stack_overrides_keyword_guess():
     sig = FailureSignal(trigger="generic thing", fix="do x", stack="rust")
     assert infer_applicability(sig, "paw") == "stack:rust"
+
+
+def test_explicit_stack_keyword_is_canonicalized():
+    # even an explicit signal.stack must not re-introduce a dead tag
+    sig = FailureSignal(trigger="generic thing", fix="do x", stack="pytest")
+    assert infer_applicability(sig, "paw") == "stack:python"
 
 
 # --- to_lesson ---

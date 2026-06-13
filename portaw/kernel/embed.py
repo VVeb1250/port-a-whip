@@ -204,6 +204,32 @@ def embed_scores(
         return {}
 
 
+_warned_unavailable = False
+
+
+def _warn_unavailable_once(md: Path | str | None) -> None:
+    """One-shot PAW_DEBUG note when tier-2 is wanted but the model/libs are missing.
+
+    The unavailable path is silent BY DESIGN (router degrades to the TF-IDF floor),
+    but that silence hides a real misconfig — a Thai/paraphrase prompt that should
+    match cross-lingually quietly doesn't. Gated on PAW_DEBUG (a per-prompt hook must
+    not spam stderr) and fired once per process so it diagnoses without nagging."""
+    global _warned_unavailable
+    # PAW_DEBUG check FIRST (cheap env read) so the hot path never pays available()
+    # — keeps lazy_embedder lazy when not debugging.
+    if _warned_unavailable or not os.environ.get("PAW_DEBUG") or available(md):
+        return
+    _warned_unavailable = True
+    import sys
+
+    d = model_dir(md)
+    why = "model files missing" if not (d / _MODEL_FILE).exists() else "onnxruntime/tokenizers not importable"
+    sys.stderr.write(
+        f"paw[debug] embed tier-2 unavailable ({why} at {d}) — recall on TF-IDF only "
+        f"(cross-lingual/paraphrase matches will miss). `pip install port-a-whip[embed]`.\n"
+    )
+
+
 def lazy_embedder(
     md: Path | str | None = None, **kw
 ) -> Callable[[str, list[Capability]], dict[str, float]]:
@@ -215,6 +241,8 @@ def lazy_embedder(
     the TF-IDF floor). Use this in hooks; `make_embedder` (None = honest signal
     for a CLI warning) stays for explicit `--embed` flows."""
     def _embed(prompt: str, caps: list[Capability]) -> dict[str, float]:
+        if caps:
+            _warn_unavailable_once(md)  # no-op unless PAW_DEBUG (cheap env check first)
         return embed_scores(prompt, caps, md=md, **kw)
 
     return _embed

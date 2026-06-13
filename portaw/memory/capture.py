@@ -21,11 +21,23 @@ _ENV_KEYWORDS = {
     "python", "python3", "py", "powershell", "pwsh", "bash", "wsl", "shell",
     "path", "backslash", "npm", "pip", "venv", "windows", "env", "chmod", "sudo",
 }
-# framework hint → stack:<x>
+# framework/tool keyword → the stack tag detect_stacks() ACTUALLY emits.
+# CRITICAL: the value MUST be a derivable stack (a STACK_MARKERS value in
+# context.py), or the lesson gets a stack tag no host context ever holds → eligible
+# NOWHERE (the stack:pytest dead-lesson bug — `pytest`/`react`/`django` are not
+# stacks any marker derives). Keywords whose language has no marker (rails→ruby) are
+# omitted so the signal falls through to universal/project instead of a dead tag.
+# A test pins every value ⊆ context.STACK_MARKERS values, so this can't drift again.
 _STACK_KEYWORDS = {
-    "react", "vue", "angular", "svelte", "next", "nextjs", "django", "flask",
-    "fastapi", "rails", "spring", "rust", "cargo", "golang", "kotlin", "swift",
-    "flutter", "dart", "pytest", "jest",
+    "pytest": "python", "flask": "python", "django": "python", "fastapi": "python",
+    "jest": "typescript", "react": "typescript", "vue": "typescript",
+    "angular": "typescript", "svelte": "typescript", "next": "typescript",
+    "nextjs": "typescript",
+    "rust": "rust", "cargo": "rust",
+    "golang": "golang",
+    "kotlin": "kotlin", "spring": "kotlin",
+    "swift": "swift",
+    "flutter": "flutter", "dart": "flutter",
 }
 
 
@@ -44,9 +56,13 @@ class FailureSignal:
 
 
 def classify_text(text: str) -> tuple[bool, str]:
-    """Heuristic: (env_level, stack) from keywords. Detector may override explicitly."""
+    """Heuristic: (env_level, stack) from keywords. Detector may override explicitly.
+
+    `stack` is the CANONICAL derivable tag (python/typescript/...), not the raw
+    keyword — so a pytest failure tags `stack:python` (eligible in any python repo),
+    never the dead `stack:pytest`."""
     toks = set(tokenize(text))
-    stack = next((s for s in _STACK_KEYWORDS if s in toks), "")
+    stack = next((tag for kw, tag in _STACK_KEYWORDS.items() if kw in toks), "")
     env_level = bool(toks & _ENV_KEYWORDS)
     return env_level, stack
 
@@ -54,7 +70,10 @@ def classify_text(text: str) -> tuple[bool, str]:
 def infer_applicability(signal: FailureSignal, project_id: str) -> str:
     """Map a signal to an applicability tag (§2.1). Conservative default = project."""
     env_level, stack = classify_text(f"{signal.trigger} {signal.fix}")
-    stack = signal.stack or stack
+    # an explicit signal.stack wins, but still gets canonicalized through the map
+    # (a host emitting stack="pytest" must not re-introduce the dead tag).
+    if signal.stack:
+        stack = _STACK_KEYWORDS.get(signal.stack, signal.stack)
     env_level = signal.env_level or env_level
     if stack:
         return f"stack:{stack}"

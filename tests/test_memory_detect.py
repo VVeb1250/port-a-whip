@@ -83,6 +83,31 @@ def test_error_detected_from_text_without_is_error_flag(tmp_path):
     assert len(sigs) == 1 and sigs[0].fix == "py run.py"
 
 
+def test_error_detected_from_nonzero_exit_marker(tmp_path):
+    # the common runner form the original Bash-centric markers missed
+    p = tmp_path / "t.jsonl"
+    _write_transcript(p, [
+        _tu("a", "pytest tests/api.py"),
+        _tr("a", "process exited with exit code 1", False),  # no is_error flag
+        _tu("b", "pytest tests/api.py -x"),
+        _tr("b", "ok", False),
+    ])
+    sigs = from_transcript(p)
+    assert len(sigs) == 1 and sigs[0].fix == "pytest tests/api.py -x"
+
+
+def test_error_detected_from_error_colon_prefix(tmp_path):
+    p = tmp_path / "t.jsonl"
+    _write_transcript(p, [
+        _tu("a", "tsc src/app.ts"),
+        _tr("a", "error: cannot find module src/app.ts", False),
+        _tu("b", "tsc src/app.ts --skipLibCheck"),
+        _tr("b", "ok", False),
+    ])
+    sigs = from_transcript(p)
+    assert len(sigs) == 1 and sigs[0].fix.endswith("--skipLibCheck")
+
+
 def test_from_transcript_missing_file_empty():
     assert from_transcript("nope/does/not/exist.jsonl") == []
 

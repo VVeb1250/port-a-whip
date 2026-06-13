@@ -18,7 +18,12 @@ from pathlib import Path
 
 from portaw.memory.capture import FailureSignal
 
-# error markers in a tool result → the command failed
+# error markers in a tool result → the command failed. Widening these does NOT
+# widen the false-lesson rate: the noise filter is the fail→fix near-variant
+# pairing (Jaccard ≥ min_overlap) downstream, not this list. What this list misses
+# = a real failure recognized as a clean run (a missed capture), so the bias is
+# toward the common shell/runner exit forms ("exit code 1", "non-zero", "error:")
+# that the original Bash-centric set ignored.
 _ERR_PATTERNS: list[tuple[str, str]] = [
     ("command not found", "command not found"),
     ("not recognized as", "command not found"),
@@ -28,6 +33,11 @@ _ERR_PATTERNS: list[tuple[str, str]] = [
     ("permission denied", "permission denied"),
     ("fatal:", "fatal"),
     (": error", "error"),
+    ("error:", "error"),
+    ("exit code", "nonzero exit"),
+    ("exit status", "nonzero exit"),
+    ("non-zero", "nonzero exit"),
+    ("returned non-zero", "nonzero exit"),
 ]
 _FILEISH = re.compile(r"[./\\]")
 _WORD = re.compile(r"[A-Za-z0-9_.\-/\\]{3,}")

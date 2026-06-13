@@ -167,7 +167,7 @@ portaw memory inject-enable session|tool|all
 - Gemini adapter (`BeforeAgent`) schema-verified from docs, NOT live (no Gemini host on box).
 - config.py multi-format (CC/Gemini JSON + Codex TOML) — merge without clobbering user's other servers.
 - Cursor/OpenCode: native strong; set-install only, router static. Low priority.
-- gain ledger (#3, continuous per-set token attribution): PARTIAL — usage report carries install dates as bench anchors; auto-attribution via ccusage deferred (use `portaw bench ab`).
+- gain ledger (#3, continuous per-set token attribution): `portaw bench gain <set>` auto-splits the host's ccusage sessions at the set's install date (before vs after) → per-session MEDIAN token delta. DIRECTIONAL only (uncontrolled windows; ≥2 sessions/side or inconclusive); for a defensible number still use `portaw bench ab` on an identical task. Never writes `measured`. `sets/gain.py`.
 
 ## Harness-quality refinements (2026-06-05, see spec §15)
 - **Router scope** (correction): router fixes Gap-B (discoverability) + tool-selection accuracy, NOT token-overhead on load-all hosts (defs load at startup; router injects on top, can't unload). Overhead → set-size ceiling + code-exec + native lazy-load. Do NOT reorder roadmap L2>L1.
